@@ -564,3 +564,16 @@ After testing digest manually, add two cron entries (`crontab -e`):
 ```
 
 **Phase 4 milestone:** Brain proactively tells you what matters — delivered to Discord DM and Gmail on a daily and weekly schedule.
+
+---
+
+### Phase 5 — In Progress: Enhancements
+
+| Enhancement | Status | Notes |
+|-------------|--------|-------|
+| Brain nudge system | ✅ Complete | `scripts/nudge.py` — runs daily at 6pm via Pi cron, silent if recent capture, rotating prompts if overdue |
+| Memory migration | 🔜 | Import Claude + ChatGPT memory exports into thoughts table |
+| Weekly review synthesis | 🔜 | Variation of digest — broader look back, pattern analysis |
+| Meeting prep automation | 🔜 | Pull context on people/topics before a meeting |
+| Birthday/follow-up reminders | 🔜 | Date parsing + cron alerts for people captured in brain |
+| Dashboard | 🔜 | Visual thinking patterns — low priority |
