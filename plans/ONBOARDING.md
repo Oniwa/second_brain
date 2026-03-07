@@ -87,7 +87,7 @@ Run `sudo python3 scripts/setup_rpi.py` on the Pi after cloning and copying `.en
 - Memory migration: **Yes** — import Claude + ChatGPT exports on Phase 5
 - Embedding: `text-embedding-3-small` (1536 dims, OpenAI)
 - Classification: Haiku first → Sonnet if confidence < 0.7
-- Completed thoughts: **delete them** — brain is for active thinking, not history
+- Completed thoughts: **archive them** (`status=archived`) — preserved for history/patterns but invisible to searches and digests
 
 ---
 

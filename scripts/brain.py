@@ -211,6 +211,7 @@ def main() -> None:
     )
     parser.add_argument("--source", default="cli", help="Source label for captures (default: cli)")
     parser.add_argument("--delete", metavar="ID", help="Delete a thought by its UUID")
+    parser.add_argument("--archive", metavar="ID", help="Archive a thought by its UUID")
 
     args = parser.parse_args()
 
@@ -221,7 +222,31 @@ def main() -> None:
         print("Copy .env.example to .env and fill in your credentials.", file=sys.stderr)
         sys.exit(1)
 
-    if args.delete:
+    if args.archive:
+        url = f"{env['SUPABASE_URL']}/rest/v1/thoughts?id=eq.{urllib.parse.quote(args.archive)}"
+        headers = {
+            "apikey": env["SUPABASE_SERVICE_ROLE_KEY"],
+            "Authorization": f"Bearer {env['SUPABASE_SERVICE_ROLE_KEY']}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({"status": "archived"}).encode("utf-8"),
+            headers=headers,
+            method="PATCH",
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                updated = json.loads(resp.read().decode("utf-8"))
+                if updated:
+                    print(f"Archived: {updated[0].get('title', args.archive)}")
+                else:
+                    print(f"No thought found with ID {args.archive}")
+        except urllib.error.HTTPError as e:
+            print(f"Error {e.code}: {e.read().decode()}", file=sys.stderr)
+            sys.exit(1)
+    elif args.delete:
         url = f"{env['SUPABASE_URL']}/rest/v1/thoughts?id=eq.{urllib.parse.quote(args.delete)}"
         headers = {
             "apikey": env["SUPABASE_SERVICE_ROLE_KEY"],

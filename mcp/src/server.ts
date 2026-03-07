@@ -171,6 +171,18 @@ async function getStats(args: { days?: number }): Promise<string> {
   return lines.join("\n");
 }
 
+async function archiveThought(args: { id: string }): Promise<string> {
+  const { data, error } = await supabase
+    .from("thoughts")
+    .update({ status: "archived" })
+    .eq("id", args.id)
+    .select("title")
+    .single();
+  if (error) throw new Error(`Archive failed: ${error.message}`);
+  if (!data) return `No thought found with ID ${args.id}.`;
+  return `Archived: ${data.title}`;
+}
+
 async function deleteThought(args: { id: string }): Promise<string> {
   const { error, count } = await supabase
     .from("thoughts")
@@ -281,6 +293,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "archive_thought",
+      description: "Archive a completed thought. It stays in the database for history but won't appear in searches or digests.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The UUID of the thought to archive" },
+        },
+        required: ["id"],
+      },
+    },
+    {
       name: "delete_thought",
       description: "Permanently delete a thought from your brain by its ID.",
       inputSchema: {
@@ -323,6 +346,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_stats":
         text = await getStats(a as Parameters<typeof getStats>[0]);
+        break;
+      case "archive_thought":
+        text = await archiveThought(a as Parameters<typeof archiveThought>[0]);
         break;
       case "delete_thought":
         text = await deleteThought(a as Parameters<typeof deleteThought>[0]);
