@@ -577,3 +577,4 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Meeting prep automation | 🔜 | Pull context on people/topics before a meeting |
 | Birthday/follow-up reminders | 🔜 | Date parsing + cron alerts for people captured in brain |
 | Dashboard | 🔜 | Visual thinking patterns — low priority |
+| Discord natural language queries | 🔜 | `!brain <question>` in Discord → semantic search + Claude Haiku synthesis → reply in channel. Full NL query without opening Claude Code. |
