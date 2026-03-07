@@ -290,20 +290,50 @@ These map to Nate's principles from the transcripts, adapted for this architectu
 
 ## Status
 
-### Phase 1 — In Progress
-Files created:
-- `supabase/migrations/001_init.sql` — thoughts table, HNSW + GIN indexes, `semantic_search()` function
+### Phase 1 — ✅ Complete
+Files:
+- `supabase/migrations/001_init.sql` — thoughts table, HNSW + GIN indexes, `semantic_search()` SQL function
 - `supabase/functions/process-thought/index.ts` — embedding + tiered Haiku/Sonnet classification
 - `supabase/config.toml` — project config
 - `.env.example` — required secrets
 - `scripts/test_capture.sh` — curl smoke test
 
-### Next Step: Deploy to Supabase
-1. Create a Supabase project at https://supabase.com/dashboard
-2. Copy `.env.example` → `.env` and fill in your project URL + keys
-3. Run the migration: `supabase db push` (or paste `001_init.sql` in the SQL editor)
-4. Deploy the function: `supabase functions deploy process-thought --no-verify-jwt`
-5. Set function secrets: `supabase secrets set OPENAI_API_KEY=... ANTHROPIC_API_KEY=...`
-6. Smoke test: `./scripts/test_capture.sh "Met Sarah about Q3 launch, she needs the deck by Friday"`
+Milestone achieved: thoughts captured via API are embedded + classified and stored in Supabase.
 
-**Phase 1 milestone:** You can capture a thought via API and it gets embedded + classified.
+---
+
+### Phase 2 — In Progress: MCP Server
+Files:
+- `mcp/src/server.ts` — MCP server with all 5 tools
+- `mcp/package.json` — Node.js dependencies
+- `mcp/tsconfig.json` — TypeScript config
+
+**Tools implemented:**
+| Tool | What it does |
+|------|-------------|
+| `semantic_search(query, limit?, category?)` | Embeds query → calls `semantic_search()` RPC → returns ranked thoughts |
+| `list_recent(days?, category?)` | Queries thoughts table by date, returns chronological list |
+| `capture_thought(text, source?)` | Calls `process-thought` Edge Function → full pipeline |
+| `get_stats(days?)` | Category breakdown + top topics over time |
+| `get_context(topic)` | Semantic search + keyword match on topics[], merged & deduplicated |
+
+**How to run:**
+```bash
+cd mcp && npm install && npm start
+```
+
+**Connect to Claude Code** — add to `~/.claude/claude_desktop_config.json` (or Claude Code MCP settings):
+```json
+{
+  "mcpServers": {
+    "second-brain": {
+      "command": "node",
+      "args": ["--import", "tsx/esm", "/absolute/path/to/mcp/src/server.ts"]
+    }
+  }
+}
+```
+
+**Connect to Claude Desktop** — same config, in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+
+**Phase 2 milestone:** Search your brain from Claude and capture thoughts from any MCP client.
