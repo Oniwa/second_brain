@@ -377,7 +377,7 @@ Wired to Claude Code via `claude mcp add`. Milestone achieved: brain is searchab
 
 ---
 
-### Phase 3 — In Progress: Capture Points
+### Phase 3 — ✅ Complete: Capture Points
 
 #### CLI Tool — ✅ Complete
 File: `scripts/brain.py` — cross-platform (Windows + Linux), zero dependencies beyond stdlib.
@@ -391,7 +391,7 @@ Linux alias: add `alias brain="python3 /path/to/scripts/brain.py"` to `~/.bashrc
 
 ---
 
-#### Discord Bot — In Progress
+#### Discord Bot — ✅ Complete
 
 **One-time Discord setup (do this first):**
 
@@ -414,7 +414,42 @@ Linux alias: add `alias brain="python3 /path/to/scripts/brain.py"` to `~/.bashrc
 - `discord/bot.py` — Discord bot (Python)
 - `discord/requirements.txt` — dependencies (`discord.py`)
 
-**Phase 3 milestone:** Multiple frictionless capture points all feeding the same brain — no dependency on Claude Code being open.
+**Phase 3 milestone achieved:** MCP, CLI, and Discord bot all capturing to the same brain.
+
+---
+
+#### Raspberry Pi Hosting — Files Ready
+The Discord bot and digest cron jobs will run on a Raspberry Pi using systemd + cron.
+
+Files created:
+- `discord/second-brain-bot.service` — systemd service (auto-start + auto-restart)
+- `scripts/setup_rpi.py` — one-shot setup script
+
+**When you're ready to set up the Pi:**
+
+1. **Flash Raspberry Pi OS** (Lite is fine) and enable SSH
+2. **SSH into the Pi** and clone the repo:
+   ```bash
+   git clone https://github.com/Oniwa/second_brain.git
+   cd second_brain
+   ```
+3. **Copy your `.env`** from your dev machine to the Pi:
+   ```bash
+   scp .env pi@<pi-ip>:/home/pi/second_brain/.env
+   ```
+4. **Run the setup script:**
+   ```bash
+   sudo python3 scripts/setup_rpi.py
+   ```
+   This installs dependencies, registers the Discord bot as a systemd service, and sets up digest cron jobs.
+
+5. **Verify the bot is running:**
+   ```bash
+   sudo systemctl status second-brain-bot
+   sudo journalctl -u second-brain-bot -f
+   ```
+
+The digest cron jobs are installed but dormant until `discord/digest.py` is built in Phase 4.
 
 ---
 
