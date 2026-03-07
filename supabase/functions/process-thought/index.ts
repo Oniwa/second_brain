@@ -101,7 +101,8 @@ async function classify(
   const raw = data.content[0].text.trim();
 
   try {
-    return JSON.parse(raw) as ClassificationResult;
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    return JSON.parse(cleaned) as ClassificationResult;
   } catch {
     throw new Error(`Classification returned invalid JSON from ${model}: ${raw}`);
   }
