@@ -171,6 +171,16 @@ async function getStats(args: { days?: number }): Promise<string> {
   return lines.join("\n");
 }
 
+async function deleteThought(args: { id: string }): Promise<string> {
+  const { error, count } = await supabase
+    .from("thoughts")
+    .delete({ count: "exact" })
+    .eq("id", args.id);
+  if (error) throw new Error(`Delete failed: ${error.message}`);
+  if (count === 0) return `No thought found with ID ${args.id}.`;
+  return `Deleted thought ${args.id}.`;
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -271,6 +281,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "delete_thought",
+      description: "Permanently delete a thought from your brain by its ID.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The UUID of the thought to delete" },
+        },
+        required: ["id"],
+      },
+    },
+    {
       name: "get_context",
       description: "Pull everything your brain knows about a topic. Combines semantic search with keyword matching.",
       inputSchema: {
@@ -302,6 +323,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_stats":
         text = await getStats(a as Parameters<typeof getStats>[0]);
+        break;
+      case "delete_thought":
+        text = await deleteThought(a as Parameters<typeof deleteThought>[0]);
         break;
       case "get_context":
         text = await getContext(a as Parameters<typeof getContext>[0]);
