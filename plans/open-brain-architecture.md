@@ -573,7 +573,7 @@ After testing digest manually, add two cron entries (`crontab -e`):
 |-------------|--------|-------|
 | Brain nudge system | ✅ Complete | `scripts/nudge.py` — runs daily at 6pm via Pi cron, silent if recent capture, rotating prompts if overdue |
 | Memory migration | ✅ Complete | `scripts/migrate_claude.py` — imports Claude export zip; Haiku filters for relevance, deduplicates semantically |
-| Weekly review synthesis | 🔜 | Variation of digest — broader look back, pattern analysis |
+| Weekly review synthesis | ✅ Complete | `discord/digest.py --review` — Sunday 9am via Pi cron; includes archived thoughts, pattern analysis, honest reflection |
 | Meeting prep automation | 🔜 | Pull context on people/topics before a meeting |
 | Birthday/follow-up reminders | 🔜 | Date parsing + cron alerts for people captured in brain |
 | Dashboard | 🔜 | Visual thinking patterns — low priority |

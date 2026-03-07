@@ -6,6 +6,7 @@ Usage:
   python3 digest.py --auth            # First-run Gmail authorization
   python3 digest.py --daily           # Send daily digest
   python3 digest.py --weekly          # Send weekly digest
+  python3 digest.py --review          # Send weekly review (reflective, includes archived)
   python3 digest.py --daily --test    # Print digest without sending
 """
 
@@ -212,6 +213,7 @@ def main() -> None:
     parser.add_argument("--auth", action="store_true", help="Authorize Gmail (run once)")
     parser.add_argument("--daily", action="store_true", help="Send daily digest")
     parser.add_argument("--weekly", action="store_true", help="Send weekly digest")
+    parser.add_argument("--review", action="store_true", help="Send weekly review (reflective, includes archived)")
     parser.add_argument("--test", action="store_true", help="Print digest without sending")
     args = parser.parse_args()
 
@@ -221,6 +223,8 @@ def main() -> None:
         run_digest("daily", test_mode=args.test)
     elif args.weekly:
         run_digest("weekly", test_mode=args.test)
+    elif args.review:
+        run_digest("weekly-review", test_mode=args.test)
     else:
         parser.print_help()
 

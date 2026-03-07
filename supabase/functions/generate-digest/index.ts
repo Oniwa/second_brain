@@ -44,6 +44,32 @@ Given the list of their active thoughts below, produce a digest with exactly thi
 
 Keep the entire digest under 250 words. Be specific and direct — use actual titles and names from their data.`;
 
+const WEEKLY_REVIEW_PROMPT = `You are a personal assistant generating a thoughtful weekly review from someone's second brain.
+This is meant to be read slowly on a Sunday morning as a reflective practice — not scanned quickly.
+
+You will receive two lists: ACTIVE THOUGHTS (what's currently on their mind) and ARCHIVED THIS WEEK (what they completed or put to rest).
+
+Produce a review with exactly this structure:
+
+**Weekly Review**
+
+✅ Completed this week:
+[List each archived thought by title, 1-2 words on what it was. If none, say "Nothing archived this week — consider if anything can be closed out."]
+
+🧠 What's been on your mind:
+[2-3 sentences describing the dominant themes across their active thoughts. Be specific — name the actual topics and projects.]
+
+🔍 Open loops to notice:
+[2-3 thoughts that have been sitting without action the longest. Name them explicitly.]
+
+🎯 One thing to focus on next week:
+[Pick the single most important active thought and make a case for why it deserves attention.]
+
+💬 Honest reflection:
+[One candid observation — something they might be avoiding, a pattern in their captures, or a tension between two things they care about. Be direct but kind.]
+
+Keep the entire review under 500 words. Use actual titles and names from the data. Write in second person ("you").`;
+
 interface Thought {
   title: string;
   summary: string;
@@ -55,8 +81,8 @@ interface Thought {
   source: string;
 }
 
-async function callClaude(prompt: string, thoughts: Thought[]): Promise<string> {
-  const thoughtsText = thoughts.map((t, i) => {
+function formatThoughts(thoughts: Thought[]): string {
+  return thoughts.map((t, i) => {
     const age = Math.floor(
       (Date.now() - new Date(t.created_at).getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -70,6 +96,13 @@ async function callClaude(prompt: string, thoughts: Thought[]): Promise<string> 
     ];
     return lines.filter(Boolean).join("\n");
   }).join("\n\n");
+}
+
+async function callClaude(prompt: string, thoughts: Thought[], archivedThoughts?: Thought[]): Promise<string> {
+  let content = `${prompt}\n\n---\nACTIVE THOUGHTS:\n\n${formatThoughts(thoughts)}`;
+  if (archivedThoughts && archivedThoughts.length > 0) {
+    content += `\n\n---\nARCHIVED THIS WEEK:\n\n${formatThoughts(archivedThoughts)}`;
+  }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -81,12 +114,7 @@ async function callClaude(prompt: string, thoughts: Thought[]): Promise<string> 
     body: JSON.stringify({
       model: SONNET_MODEL,
       max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: `${prompt}\n\n---\nACTIVE THOUGHTS:\n\n${thoughtsText}`,
-        },
-      ],
+      messages: [{ role: "user", content }],
     }),
   });
 
@@ -117,7 +145,7 @@ serve(async (req) => {
     });
   }
 
-  let body: { type: "daily" | "weekly" };
+  let body: { type: "daily" | "weekly" | "weekly-review" };
   try {
     body = await req.json();
   } catch {
@@ -128,8 +156,8 @@ serve(async (req) => {
   }
 
   const { type } = body;
-  if (type !== "daily" && type !== "weekly") {
-    return new Response(JSON.stringify({ error: "type must be 'daily' or 'weekly'" }), {
+  if (type !== "daily" && type !== "weekly" && type !== "weekly-review") {
+    return new Response(JSON.stringify({ error: "type must be 'daily', 'weekly', or 'weekly-review'" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -137,7 +165,7 @@ serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Query active thoughts — last 7 days for daily, 30 for weekly
+  // Query active thoughts — last 7 days for daily, 30 for weekly/weekly-review
   const days = type === "daily" ? 7 : 30;
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -163,12 +191,28 @@ serve(async (req) => {
     );
   }
 
+  // For weekly review, also fetch thoughts archived in the last 7 days
+  let archivedThoughts: Thought[] | undefined;
+  if (type === "weekly-review") {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const { data: archived } = await supabase
+      .from("thoughts")
+      .select("title, summary, category, action_items, people, topics, created_at, source")
+      .eq("status", "archived")
+      .gte("updated_at", weekAgo.toISOString())
+      .order("updated_at", { ascending: false });
+    archivedThoughts = (archived ?? []) as Thought[];
+  }
+
   try {
-    const prompt = type === "daily" ? DAILY_PROMPT : WEEKLY_PROMPT;
-    const digest = await callClaude(prompt, thoughts as Thought[]);
+    const prompt = type === "daily" ? DAILY_PROMPT : type === "weekly" ? WEEKLY_PROMPT : WEEKLY_REVIEW_PROMPT;
+    const digest = await callClaude(prompt, thoughts as Thought[], archivedThoughts);
     const subject = type === "daily"
       ? `🧠 Second Brain — Daily Digest`
-      : `🧠 Second Brain — Weekly Digest`;
+      : type === "weekly"
+      ? `🧠 Second Brain — Weekly Digest`
+      : `🧠 Second Brain — Weekly Review`;
 
     return new Response(
       JSON.stringify({ digest, subject, thought_count: thoughts.length }),

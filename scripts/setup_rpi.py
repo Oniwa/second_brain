@@ -110,6 +110,10 @@ def setup_cron() -> None:
         f"0 18 * * * {actual_user} {python} {nudge_script} "
         f">> {log_dir}/nudge.log 2>&1 {CRON_MARKER}"
     )
+    review_job = (
+        f"0 9 * * 0 {actual_user} {python} {digest_script} --review "
+        f">> {log_dir}/digest-review.log 2>&1 {CRON_MARKER}"
+    )
 
     cron_file = Path("/etc/cron.d/second-brain-digest")
 
@@ -123,6 +127,8 @@ def setup_cron() -> None:
         f"{daily_job}\n"
         f"# Weekly digest Sunday at 8am\n"
         f"{weekly_job}\n"
+        f"# Weekly review Sunday at 9am (reflective, includes archived)\n"
+        f"{review_job}\n"
         f"# Nudge check at 6pm daily (sends only if silent for 2+ days)\n"
         f"{nudge_job}\n"
     )
