@@ -578,3 +578,4 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Birthday/follow-up reminders | 🔜 | Date parsing + cron alerts for people captured in brain |
 | Dashboard | 🔜 | Visual thinking patterns — low priority |
 | Discord natural language queries | 🔜 | `!brain <question>` in Discord → semantic search + Claude Haiku synthesis → reply in channel. Full NL query without opening Claude Code. |
+| Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
