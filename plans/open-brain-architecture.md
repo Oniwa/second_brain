@@ -302,9 +302,9 @@ Milestone achieved: thoughts captured via API are embedded + classified and stor
 
 ---
 
-### Phase 2 — In Progress: MCP Server
+### Phase 2 — ✅ Complete: MCP Server
 Files:
-- `mcp/src/server.ts` — MCP server with all 5 tools
+- `mcp/src/server.ts` — MCP server with 6 tools
 - `mcp/package.json` — Node.js dependencies
 - `mcp/tsconfig.json` — TypeScript config
 
@@ -316,24 +316,20 @@ Files:
 | `capture_thought(text, source?)` | Calls `process-thought` Edge Function → full pipeline |
 | `get_stats(days?)` | Category breakdown + top topics over time |
 | `get_context(topic)` | Semantic search + keyword match on topics[], merged & deduplicated |
+| `delete_thought(id)` | Permanently removes a thought by UUID |
 
-**How to run:**
-```bash
-cd mcp && npm install && npm start
-```
+Wired to Claude Code via `claude mcp add`. Milestone achieved: brain is searchable and writable from Claude.
 
-**Connect to Claude Code** — add to `~/.claude/claude_desktop_config.json` (or Claude Code MCP settings):
-```json
-{
-  "mcpServers": {
-    "second-brain": {
-      "command": "node",
-      "args": ["--import", "tsx/esm", "/absolute/path/to/mcp/src/server.ts"]
-    }
-  }
-}
-```
+---
 
-**Connect to Claude Desktop** — same config, in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+### Phase 3 — Up Next: Capture Points
+Goals:
+- **Discord bot** — watches private `#sb-inbox` channel, posts receipt in-thread on capture
+- **CLI tool** — `brain "your thought"` one-liner from any terminal
+- **Confirmation receipts** — every capture method returns title, category, confidence
 
-**Phase 2 milestone:** Search your brain from Claude and capture thoughts from any MCP client.
+Files to create:
+- `discord/bot.py` (or `discord/bot.ts`) — Discord bot
+- `scripts/brain.sh` — CLI capture shortcut
+
+**Phase 3 milestone:** Multiple frictionless capture points all feeding the same brain — no dependency on Claude Code being open.
