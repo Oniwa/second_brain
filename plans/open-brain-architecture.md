@@ -223,12 +223,37 @@ The MCP server is what makes this agent-readable. It exposes your brain to any M
 - **Milestone:** Multiple frictionless capture points all feeding the same brain
 
 ### Phase 4: Surfacing & Digests
-- Build `generate-digest` Edge Function (Claude Sonnet summarizes recent thoughts)
-- Deliver digest via **both Discord DM and email**
-- Digest format: top 3 actions, one stuck item, one pattern noticed
-- Schedule: TBD (daily, weekly, or both)
-- Build `discord/digest.py` — calls Edge Function, sends Discord DM + email
-- **Milestone:** The system proactively tells you what matters today
+
+**Architecture:**
+```
+Cron job (daily + weekly)
+  → calls generate-digest Edge Function
+      → queries thoughts table
+      → Claude Sonnet summarizes
+      → returns digest text
+  → digest.py sends Discord DM via Discord API
+  → digest.py sends email via Gmail API
+```
+
+**Digest formats:**
+- **Daily** — top 3 actions, one stuck item
+- **Weekly** — top 3 actions, one stuck item, pattern noticed across the week, reading list reminder
+
+**Delivery:** Discord DM + Gmail (both, every run)
+
+**Email setup (one-time):**
+1. Enable Gmail API at console.cloud.google.com → APIs & Services → Library
+2. Create OAuth credentials → Desktop app → download as `credentials.json`
+3. OAuth consent screen → External → add `gmail.send` scope → add Gmail as test user
+
+**Files to build:**
+- `supabase/functions/generate-digest/index.ts` — Edge Function (Deno)
+- `discord/digest.py` — Python script: calls Edge Function, sends Discord DM + Gmail
+- `credentials.json` — Gmail OAuth credentials (gitignored)
+
+**Scheduling:** Two cron jobs — daily digest + weekly digest
+
+**Milestone:** Brain proactively tells you what matters, delivered to Discord DM and Gmail on schedule.
 
 ### Phase 5: Enhancements
 - Memory migration (pull from Claude memory, ChatGPT memory)
