@@ -289,6 +289,35 @@ Cron job (daily + weekly)
 - Meeting prep automation
 - Birthday/follow-up reminders
 - Weekly review synthesis
+- **Brain nudge system** — if no captures in N days, Discord DM with a rotating prompt to get thinking again
+
+**Nudge prompt rotation (by category):**
+
+*People/relationships:*
+- "Is there anyone you need to follow up with?"
+- "Who did you talk to this week that's worth remembering?"
+
+*Projects:*
+- "What's one thing that's been sitting on your to-do list too long?"
+- "What project have you been avoiding and why?"
+
+*Ideas:*
+- "What's something you read, watched, or heard recently that stuck with you?"
+- "What's a problem you've been turning over in your head?"
+
+*Health/habits:*
+- "Did you do anything this week toward your health goals?"
+- "What's one habit you want to build or break?"
+
+*General:*
+- "What's on your mind right now?"
+- "What do you want to remember about today?"
+- "What's one thing you're grateful for or excited about?"
+
+**How it works:**
+- Cron job runs daily, checks last `created_at` in thoughts table
+- If gap > N days (configurable, default 2), sends a Discord DM with a random prompt
+- If you've captured recently, stays silent — no noise
 
 ---
 
