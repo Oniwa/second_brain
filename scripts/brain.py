@@ -210,6 +210,7 @@ def main() -> None:
         help="Filter by category",
     )
     parser.add_argument("--source", default="cli", help="Source label for captures (default: cli)")
+    parser.add_argument("--delete", metavar="ID", help="Delete a thought by its UUID")
 
     args = parser.parse_args()
 
@@ -220,7 +221,25 @@ def main() -> None:
         print("Copy .env.example to .env and fill in your credentials.", file=sys.stderr)
         sys.exit(1)
 
-    if args.thought:
+    if args.delete:
+        url = f"{env['SUPABASE_URL']}/rest/v1/thoughts?id=eq.{urllib.parse.quote(args.delete)}"
+        headers = {
+            "apikey": env["SUPABASE_SERVICE_ROLE_KEY"],
+            "Authorization": f"Bearer {env['SUPABASE_SERVICE_ROLE_KEY']}",
+            "Prefer": "return=representation",
+        }
+        req = urllib.request.Request(url, headers=headers, method="DELETE")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                deleted = json.loads(resp.read().decode("utf-8"))
+                if deleted:
+                    print(f"Deleted: {deleted[0].get('title', args.delete)}")
+                else:
+                    print(f"No thought found with ID {args.delete}")
+        except urllib.error.HTTPError as e:
+            print(f"Error {e.code}: {e.read().decode()}", file=sys.stderr)
+            sys.exit(1)
+    elif args.thought:
         capture(env, args.thought, source=args.source)
     elif args.recent:
         recent(env, days=args.days, category=args.category)
