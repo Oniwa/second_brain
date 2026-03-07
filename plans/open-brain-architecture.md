@@ -322,14 +322,41 @@ Wired to Claude Code via `claude mcp add`. Milestone achieved: brain is searchab
 
 ---
 
-### Phase 3 — Up Next: Capture Points
-Goals:
-- **Discord bot** — watches private `#sb-inbox` channel, posts receipt in-thread on capture
-- **CLI tool** — `brain "your thought"` one-liner from any terminal
-- **Confirmation receipts** — every capture method returns title, category, confidence
+### Phase 3 — In Progress: Capture Points
 
-Files to create:
-- `discord/bot.py` (or `discord/bot.ts`) — Discord bot
-- `scripts/brain.sh` — CLI capture shortcut
+#### CLI Tool — ✅ Complete
+File: `scripts/brain.py` — cross-platform (Windows + Linux), zero dependencies beyond stdlib.
+```
+python brain.py "thought"               # capture
+python brain.py --recent [--days N]     # list recent
+python brain.py --search "query"        # semantic search
+python brain.py --stats [--days N]      # usage stats
+```
+Linux alias: add `alias brain="python3 /path/to/scripts/brain.py"` to `~/.bashrc`
+
+---
+
+#### Discord Bot — In Progress
+
+**One-time Discord setup (do this first):**
+
+1. **Create a Discord account** at discord.com (or log in)
+2. **Create your server** — click **+** in the left sidebar → "Create My Own" → "For me and my friends" → name it "Second Brain"
+3. **Create the bot at the Developer Portal**
+   - Go to discord.com/developers/applications
+   - Click **New Application** → name it "Second Brain Bot"
+   - Go to **Bot** → click **Add Bot**
+   - Under **Token** → click **Reset Token** → copy it (this is `DISCORD_BOT_TOKEN`)
+   - Scroll down → **Privileged Gateway Intents** → enable **Message Content Intent**
+4. **Invite the bot to your server**
+   - Go to **OAuth2 → URL Generator**
+   - Scopes: check **bot**
+   - Bot Permissions: check **Read Messages/View Channels**, **Send Messages**, **Create Public Threads**, **Send Messages in Threads**
+   - Copy the generated URL → open in browser → invite bot to your Second Brain server
+5. **Create the `#sb-inbox` channel** in your server
+
+**Files to create:**
+- `discord/bot.py` — Discord bot (Python)
+- `discord/requirements.txt` — dependencies (`discord.py`)
 
 **Phase 3 milestone:** Multiple frictionless capture points all feeding the same brain — no dependency on Claude Code being open.
