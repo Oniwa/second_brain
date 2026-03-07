@@ -97,6 +97,7 @@ def setup_cron() -> None:
     # Ensure log directory exists
     Path(log_dir).mkdir(exist_ok=True)
 
+    nudge_script = f"{project_path}/scripts/nudge.py"
     daily_job = (
         f"0 7 * * * {actual_user} {python} {digest_script} --daily "
         f">> {log_dir}/digest-daily.log 2>&1 {CRON_MARKER}"
@@ -104,6 +105,10 @@ def setup_cron() -> None:
     weekly_job = (
         f"0 8 * * 0 {actual_user} {python} {digest_script} --weekly "
         f">> {log_dir}/digest-weekly.log 2>&1 {CRON_MARKER}"
+    )
+    nudge_job = (
+        f"0 18 * * * {actual_user} {python} {nudge_script} "
+        f">> {log_dir}/nudge.log 2>&1 {CRON_MARKER}"
     )
 
     cron_file = Path("/etc/cron.d/second-brain-digest")
@@ -113,11 +118,13 @@ def setup_cron() -> None:
         cron_file.unlink()
 
     cron_file.write_text(
-        f"# Second Brain digest cron jobs\n"
-        f"# Daily at 7am\n"
+        f"# Second Brain digest + nudge cron jobs\n"
+        f"# Daily digest at 7am\n"
         f"{daily_job}\n"
-        f"# Weekly Sunday at 8am\n"
+        f"# Weekly digest Sunday at 8am\n"
         f"{weekly_job}\n"
+        f"# Nudge check at 6pm daily (sends only if silent for 2+ days)\n"
+        f"{nudge_job}\n"
     )
     print(f"  Wrote {cron_file}")
     print("  NOTE: Cron jobs will activate once discord/digest.py is built (Phase 4).")
