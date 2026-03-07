@@ -281,7 +281,7 @@ Cron job (daily + weekly)
    - Run `python3 discord/digest.py --auth` once to authorize and generate `token.json`
    - After that, the cron job runs silently with no browser needed
 
-**Milestone:** Brain proactively tells you what matters, delivered to Discord DM and Gmail on schedule.
+**Milestone achieved:** Daily and weekly digests delivered via Discord DM + Gmail. Cron scheduling deferred to Pi day — `setup_rpi.py` will install both jobs automatically.
 
 ### Phase 5: Enhancements
 - Memory migration (pull from Claude memory, ChatGPT memory)
@@ -503,7 +503,7 @@ The digest cron jobs are installed but dormant until `discord/digest.py` is buil
 
 ---
 
-### Phase 4 — Up Next: Digests
+### Phase 4 — ✅ Complete: Digests
 
 #### Step 1 — Gmail API Setup (you do this)
 1. Go to **console.cloud.google.com** → create a new project named "Second Brain"
