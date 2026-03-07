@@ -223,9 +223,11 @@ The MCP server is what makes this agent-readable. It exposes your brain to any M
 - **Milestone:** Multiple frictionless capture points all feeding the same brain
 
 ### Phase 4: Surfacing & Digests
-- Build `generate-digest` Edge Function
-- Set up daily/weekly digest delivery (Discord DM, Slack DM, email, or MCP)
-- Add the "bouncer" — confidence threshold routing
+- Build `generate-digest` Edge Function (Claude Sonnet summarizes recent thoughts)
+- Deliver digest via **both Discord DM and email**
+- Digest format: top 3 actions, one stuck item, one pattern noticed
+- Schedule: TBD (daily, weekly, or both)
+- Build `discord/digest.py` — calls Edge Function, sends Discord DM + email
 - **Milestone:** The system proactively tells you what matters today
 
 ### Phase 5: Enhancements
