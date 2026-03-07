@@ -427,27 +427,77 @@ Files created:
 
 **When you're ready to set up the Pi:**
 
-1. **Flash Raspberry Pi OS** (Lite is fine) and enable SSH
-2. **SSH into the Pi** and clone the repo:
-   ```bash
-   git clone https://github.com/Oniwa/second_brain.git
-   cd second_brain
-   ```
-3. **Copy your `.env`** from your dev machine to the Pi:
-   ```bash
-   scp .env pi@<pi-ip>:/home/pi/second_brain/.env
-   ```
-4. **Run the setup script:**
-   ```bash
-   sudo python3 scripts/setup_rpi.py
-   ```
-   This installs dependencies, registers the Discord bot as a systemd service, and sets up digest cron jobs.
+**Part A — Flash and connect**
+1. Download **Raspberry Pi Imager** from raspberrypi.com/software
+2. Flash **Raspberry Pi OS Lite** (64-bit) to your SD card
+3. Before writing, click the gear icon in Imager and:
+   - Set hostname (e.g. `secondbrain`)
+   - Enable SSH
+   - Set username/password (remember these)
+   - Configure your WiFi SSID + password
+4. Insert SD card into Pi and power it on
+5. Find its IP address — check your router's device list or run `ping secondbrain.local` from your dev machine
+6. SSH in: `ssh pi@<pi-ip>` (or whatever username you set)
 
-5. **Verify the bot is running:**
-   ```bash
-   sudo systemctl status second-brain-bot
-   sudo journalctl -u second-brain-bot -f
-   ```
+**Part B — Install git and clone the repo**
+```bash
+sudo apt-get update && sudo apt-get install -y git python3-pip
+git clone https://github.com/Oniwa/second_brain.git
+cd second_brain
+```
+
+**Part C — Copy credentials from your dev machine**
+
+Run these from your dev machine (not the Pi):
+```bash
+# Copy .env
+scp /home/oniwa/PycharmProjects/second_brain/.env pi@<pi-ip>:/home/pi/second_brain/.env
+
+# Copy Gmail credentials (when ready after Phase 4 setup)
+scp /home/oniwa/PycharmProjects/second_brain/credentials.json pi@<pi-ip>:/home/pi/second_brain/credentials.json
+```
+
+**Part D — Run the setup script**
+```bash
+sudo python3 scripts/setup_rpi.py
+```
+This will:
+- Install Python dependencies (discord.py, google-auth libs)
+- Install and start the Discord bot as a systemd service
+- Set up daily (7am) and weekly (Sunday 8am) digest cron jobs
+- Create a `logs/` directory for digest output
+
+**Part E — Verify everything is working**
+```bash
+# Check Discord bot service
+sudo systemctl status second-brain-bot
+
+# Watch live logs
+sudo journalctl -u second-brain-bot -f
+
+# Check cron jobs were installed
+cat /etc/cron.d/second-brain-digest
+```
+
+Post a message in `#sb-inbox` on Discord to confirm the bot is capturing.
+
+**Part F — Authorize Gmail (after Phase 4 is built)**
+```bash
+python3 discord/digest.py --auth
+```
+Follow the browser prompt, then test manually:
+```bash
+python3 discord/digest.py --daily
+python3 discord/digest.py --weekly
+```
+
+**Useful Pi commands going forward:**
+```bash
+sudo systemctl restart second-brain-bot   # restart bot after code changes
+sudo systemctl stop second-brain-bot      # stop bot
+sudo journalctl -u second-brain-bot -n 50 # last 50 log lines
+tail -f logs/digest-daily.log             # watch digest logs
+```
 
 The digest cron jobs are installed but dormant until `discord/digest.py` is built in Phase 4.
 
