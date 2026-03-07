@@ -415,3 +415,38 @@ Linux alias: add `alias brain="python3 /path/to/scripts/brain.py"` to `~/.bashrc
 - `discord/requirements.txt` — dependencies (`discord.py`)
 
 **Phase 3 milestone:** Multiple frictionless capture points all feeding the same brain — no dependency on Claude Code being open.
+
+---
+
+### Phase 4 — Up Next: Digests
+
+#### Step 1 — Gmail API Setup (you do this)
+1. Go to **console.cloud.google.com** → create a new project named "Second Brain"
+2. **APIs & Services → Library** → search "Gmail API" → **Enable**
+3. **APIs & Services → OAuth consent screen** → External → fill in app name + your Gmail → Save and Continue → add scope `https://www.googleapis.com/auth/gmail.send` → Save → add your Gmail as test user → Save
+4. **APIs & Services → Credentials** → **Create Credentials → OAuth client ID** → Desktop app → name "Second Brain Digest" → Create → **Download JSON** → save as `credentials.json` in the project root
+
+#### Step 2 — Build digest system (Claude Code does this)
+Once `credentials.json` is in the project root, tell Claude Code to build Phase 4. Files to be created:
+- `supabase/functions/generate-digest/index.ts` — Edge Function: queries thoughts, Claude Sonnet summarizes, returns digest JSON
+- `discord/digest.py` — Python script: calls Edge Function, sends Discord DM + Gmail
+- Cron jobs: one for daily digest, one for weekly digest
+
+#### Step 3 — First-run authorization
+After `digest.py` is built, run once to authorize Gmail:
+```bash
+python3 discord/digest.py --auth
+```
+This opens a browser, you log in, and `token.json` is saved. After that the cron job runs silently.
+
+#### Step 4 — Set up cron jobs (you do this)
+After testing digest manually, add two cron entries (`crontab -e`):
+```
+# Daily digest — 7am every day
+0 7 * * * cd /home/oniwa/PycharmProjects/second_brain && python3 discord/digest.py --daily
+
+# Weekly digest — 8am every Sunday
+0 8 * * 0 cd /home/oniwa/PycharmProjects/second_brain && python3 discord/digest.py --weekly
+```
+
+**Phase 4 milestone:** Brain proactively tells you what matters — delivered to Discord DM and Gmail on a daily and weekly schedule.
