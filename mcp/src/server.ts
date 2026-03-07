@@ -171,6 +171,31 @@ async function getStats(args: { days?: number }): Promise<string> {
   return lines.join("\n");
 }
 
+async function updateThought(args: {
+  id: string;
+  raw_text?: string;
+  title?: string;
+  summary?: string;
+  category?: string;
+  people?: string[];
+  topics?: string[];
+  action_items?: string[];
+  status?: string;
+}): Promise<string> {
+  const { id, ...fields } = args;
+  const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+  if (Object.keys(updates).length === 0) return "No fields provided to update.";
+  const { data, error } = await supabase
+    .from("thoughts")
+    .update(updates)
+    .eq("id", id)
+    .select("title")
+    .single();
+  if (error) throw new Error(`Update failed: ${error.message}`);
+  if (!data) return `No thought found with ID ${id}.`;
+  return `Updated: ${data.title}`;
+}
+
 async function archiveThought(args: { id: string }): Promise<string> {
   const { data, error } = await supabase
     .from("thoughts")
@@ -293,6 +318,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "update_thought",
+      description: "Update fields on an existing thought — correct people, topics, title, category, or any other field.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The UUID of the thought to update" },
+          raw_text: { type: "string", description: "Corrected raw text" },
+          title: { type: "string", description: "Updated title" },
+          summary: { type: "string", description: "Updated summary" },
+          category: { type: "string", enum: ["person", "project", "idea", "admin", "insight"] },
+          people: { type: "array", items: { type: "string" }, description: "Updated people list" },
+          topics: { type: "array", items: { type: "string" }, description: "Updated topics list" },
+          action_items: { type: "array", items: { type: "string" }, description: "Updated action items" },
+          status: { type: "string", enum: ["active", "needs_review", "archived"] },
+        },
+        required: ["id"],
+      },
+    },
+    {
       name: "archive_thought",
       description: "Archive a completed thought. It stays in the database for history but won't appear in searches or digests.",
       inputSchema: {
@@ -346,6 +390,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_stats":
         text = await getStats(a as Parameters<typeof getStats>[0]);
+        break;
+      case "update_thought":
+        text = await updateThought(a as Parameters<typeof updateThought>[0]);
         break;
       case "archive_thought":
         text = await archiveThought(a as Parameters<typeof archiveThought>[0]);
