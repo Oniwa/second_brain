@@ -253,6 +253,34 @@ Cron job (daily + weekly)
 
 **Scheduling:** Two cron jobs — daily digest + weekly digest
 
+**One-time Gmail API setup:**
+
+1. **Create a Google Cloud project**
+   - Go to console.cloud.google.com
+   - Click the project dropdown → **New Project** → name it "Second Brain" → Create
+
+2. **Enable the Gmail API**
+   - Go to **APIs & Services → Library**
+   - Search "Gmail API" → click it → **Enable**
+
+3. **Configure OAuth consent screen**
+   - Go to **APIs & Services → OAuth consent screen**
+   - User type: **External** → Create
+   - Fill in App name ("Second Brain"), your Gmail as User support email and Developer contact
+   - Click **Save and Continue**
+   - On Scopes page → **Add or Remove Scopes** → find and add `https://www.googleapis.com/auth/gmail.send` → Update → Save and Continue
+   - On Test users page → **Add Users** → add your Gmail address → Save and Continue
+
+4. **Create OAuth credentials**
+   - Go to **APIs & Services → Credentials** → **Create Credentials → OAuth client ID**
+   - Application type: **Desktop app**
+   - Name: "Second Brain Digest" → Create
+   - Click **Download JSON** → save as `credentials.json` in the project root
+
+5. **First run will open a browser for authorization**
+   - Run `python3 discord/digest.py --auth` once to authorize and generate `token.json`
+   - After that, the cron job runs silently with no browser needed
+
 **Milestone:** Brain proactively tells you what matters, delivered to Discord DM and Gmail on schedule.
 
 ### Phase 5: Enhancements
