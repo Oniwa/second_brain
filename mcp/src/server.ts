@@ -55,6 +55,7 @@ function formatThought(t: Record<string, unknown>): string {
       : "",
     `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}`,
     t.similarity ? `Similarity: ${((t.similarity as number) * 100).toFixed(1)}%` : "",
+    `ID: ${t.id}`,
   ];
   return lines.filter(Boolean).join("\n");
 }
