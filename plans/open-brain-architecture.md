@@ -577,8 +577,38 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Meeting prep automation | ✅ Complete | `scripts/meeting_prep.py` + `meeting_prep` MCP tool — semantic search + people lookup + Haiku synthesis; invoke via CLI (`--send` for Discord DM) or Claude Code |
 | Meeting prep — Discord trigger | 🔜 | `!prep <meeting description>` in Discord → runs meeting_prep.py → DMs you the brief. Same bot as `#sb-inbox`. |
 | Meeting prep — Calendar trigger | 🔜 | Cron job checks Google Calendar for meetings starting within 30 min; auto-runs meeting prep and DMs brief. Reuses calendar.readonly OAuth scope from Calendar digest integration. |
-| Birthday/follow-up reminders | 🔜 | Date parsing + cron alerts for people captured in brain |
+| Birthday/follow-up reminders | ✅ Complete | `scripts/remind.py` — daily cron, queries thoughts tagged birthday/anniversary/follow-up/reminder, Haiku identifies what's due in N days, Discord DM if anything upcoming. See design decision below. |
 | Dashboard | 🔜 | Visual thinking patterns — low priority |
 | Discord natural language queries | 🔜 | `!brain <question>` in Discord → semantic search + Claude Haiku synthesis → reply in channel. Full NL query without opening Claude Code. |
 | Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
 | Google Calendar digest integration | 🔜 | Pull today's/week's calendar events into daily/weekly digests. Requires adding calendar.readonly OAuth scope to existing Gmail credentials. |
+
+---
+
+#### Birthday/Follow-up Reminders — Design Decision
+
+**Option A: No schema changes — Haiku-parsed reminders (chosen)**
+User captures dates in natural language — *"Mike's birthday is March 15"*, *"Follow up with Sarah about the contract by March 20"*. The thought is classified normally and tagged with topics like `birthday`, `follow-up`, `anniversary`. A daily cron script (`scripts/remind.py`) queries thoughts by those topics, sends them to Haiku with today's date, and Haiku identifies what's due today or within N days. Relevant reminders are sent via Discord DM.
+
+- ✅ No schema changes
+- ✅ Capture stays one action — same Discord/CLI flow
+- ✅ Haiku handles fuzzy date parsing (e.g. "next Tuesday", "end of March")
+- ⚠️ Reliability depends on Haiku correctly parsing dates from natural language
+- ⚠️ Requires consistent capture convention (topics must include `birthday` / `follow-up`)
+
+**Capture conventions:**
+- Birthday: *"Mike's birthday is March 15"* → topics: `[birthday]`, people: `[Mike]`
+- Follow-up: *"Follow up with Sarah about the contract by March 20"* → topics: `[follow-up]`, people: `[Sarah]`
+- Anniversary: *"Wedding anniversary April 3"* → topics: `[anniversary]`
+
+**Option B: Dedicated `reminders` table**
+A separate Postgres table: `(id, person, date, type, note)`. A new capture path (CLI flag or Discord command like `!remind Mike birthday 2026-03-15`) writes structured rows. Cron queries by date with exact SQL date math.
+
+- ✅ Reliable date math — no ambiguity
+- ✅ Easy to list/edit/delete individual reminders
+- ⚠️ New table, new migration, new capture path
+- ⚠️ More friction to capture — breaks the "one action" principle
+- ⚠️ Duplicates data already in thoughts (person mentioned twice)
+
+**Decision: Option A.** Consistent with the architecture's routing-over-organizing and single-table principles. If Haiku date parsing proves unreliable in practice, migrate to Option B — the thoughts data would still exist and could be backfilled.
+
