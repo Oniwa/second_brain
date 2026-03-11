@@ -2,14 +2,15 @@
 """
 setup_rpi.py — One-shot Raspberry Pi setup for Second Brain
 
-Run this on your Pi after cloning the repo and copying .env:
-  python3 scripts/setup_rpi.py
+Run this on your Pi after cloning the repo and copying .env and token.json:
+  sudo python3 scripts/setup_rpi.py
 
 What it does:
-  1. Installs Python dependencies (discord.py, google-auth libs)
-  2. Installs the Discord bot as a systemd service (auto-start on boot)
-  3. Sets up daily + weekly digest cron jobs
-  4. Prints next steps
+  1. Checks all required environment variables are present
+  2. Installs Python dependencies
+  3. Installs the Discord bot as a systemd service (auto-start on boot)
+  4. Sets up all cron jobs (digests, review, nudge, reminders)
+  5. Prints verification commands
 """
 
 import os
@@ -22,7 +23,17 @@ DISCORD_DIR = PROJECT_ROOT / "discord"
 SERVICE_NAME = "second-brain-bot"
 SERVICE_SRC = DISCORD_DIR / "second-brain-bot.service"
 SERVICE_DEST = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
-CRON_MARKER = "# second-brain-digest"
+CRON_FILE = Path("/etc/cron.d/second-brain")
+
+REQUIRED_ENV_VARS = [
+    "DISCORD_BOT_TOKEN",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "DISCORD_USER_ID",
+    "GMAIL_RECIPIENT",
+]
 
 
 def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -40,35 +51,62 @@ def check_root() -> None:
 def check_env() -> None:
     env_file = PROJECT_ROOT / ".env"
     if not env_file.exists():
-        print(f"ERROR: .env file not found at {env_file}")
-        print("Copy .env.example to .env and fill in your credentials first.")
+        print(f"ERROR: .env not found at {env_file}")
+        print("Copy .env from your dev machine first:")
+        print("  scp /path/to/second_brain/.env <user>@<pi-ip>:~/second_brain/.env")
         sys.exit(1)
-    print(f"  .env found at {env_file}")
+
+    # Parse .env
+    env = {}
+    with open(env_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip()
+    # Environment variables take precedence
+    for key in REQUIRED_ENV_VARS:
+        if key in os.environ:
+            env[key] = os.environ[key]
+
+    missing = [k for k in REQUIRED_ENV_VARS if not env.get(k)]
+    if missing:
+        print(f"ERROR: Missing required keys in .env: {', '.join(missing)}")
+        sys.exit(1)
+
+    print(f"  .env found — all required keys present")
+
+    # Check token.json for Gmail
+    token_file = PROJECT_ROOT / "token.json"
+    if not token_file.exists():
+        print("  WARNING: token.json not found — Gmail delivery will fail.")
+        print("  Copy token.json from your dev machine:")
+        print("  scp /path/to/second_brain/token.json <user>@<pi-ip>:~/second_brain/token.json")
+    else:
+        print("  token.json found — Gmail delivery ready")
 
 
 def install_dependencies() -> None:
-    print("\n[1/4] Installing Python dependencies...")
+    print("\n[2/4] Installing Python dependencies...")
     requirements = [
         DISCORD_DIR / "requirements.txt",
-        PROJECT_ROOT / "discord" / "digest-requirements.txt",
+        DISCORD_DIR / "digest-requirements.txt",
     ]
     for req in requirements:
         if req.exists():
             run(["pip3", "install", "-r", str(req), "--break-system-packages", "-q"])
         else:
-            print(f"  (skipping {req.name} — not found yet)")
+            print(f"  (skipping {req.name} — not found)")
 
 
 def install_systemd_service() -> None:
-    print("\n[2/4] Installing systemd service for Discord bot...")
+    print("\n[3/4] Installing Discord bot systemd service...")
 
-    # Read the service file and update the path for this Pi's actual location
-    service_content = SERVICE_SRC.read_text()
     actual_user = os.environ.get("SUDO_USER", "pi")
-    actual_home = Path(f"/home/{actual_user}")
     project_path = str(PROJECT_ROOT)
 
-    # Replace placeholder paths with actual paths
+    service_content = SERVICE_SRC.read_text()
     service_content = service_content.replace("/home/pi/second_brain", project_path)
     service_content = service_content.replace("User=pi", f"User={actual_user}")
     service_content = service_content.replace(
@@ -82,79 +120,66 @@ def install_systemd_service() -> None:
     run(["systemctl", "daemon-reload"])
     run(["systemctl", "enable", SERVICE_NAME])
     run(["systemctl", "start", SERVICE_NAME])
-    print(f"  Discord bot service enabled and started.")
+    print("  Discord bot service enabled and started")
 
 
 def setup_cron() -> None:
-    print("\n[3/4] Setting up digest cron jobs...")
+    print("\n[4/4] Setting up cron jobs...")
 
     actual_user = os.environ.get("SUDO_USER", "pi")
     project_path = str(PROJECT_ROOT)
     python = "/usr/bin/python3"
-    digest_script = f"{project_path}/discord/digest.py"
     log_dir = f"{project_path}/logs"
 
-    # Ensure log directory exists
     Path(log_dir).mkdir(exist_ok=True)
 
-    nudge_script = f"{project_path}/scripts/nudge.py"
-    daily_job = (
-        f"0 7 * * * {actual_user} {python} {digest_script} --daily "
-        f">> {log_dir}/digest-daily.log 2>&1 {CRON_MARKER}"
-    )
-    weekly_job = (
-        f"0 8 * * 0 {actual_user} {python} {digest_script} --weekly "
-        f">> {log_dir}/digest-weekly.log 2>&1 {CRON_MARKER}"
-    )
-    nudge_job = (
-        f"0 18 * * * {actual_user} {python} {nudge_script} "
-        f">> {log_dir}/nudge.log 2>&1 {CRON_MARKER}"
-    )
-    review_job = (
-        f"0 9 * * 0 {actual_user} {python} {digest_script} --review "
-        f">> {log_dir}/digest-review.log 2>&1 {CRON_MARKER}"
-    )
+    digest  = f"{project_path}/discord/digest.py"
+    nudge   = f"{project_path}/scripts/nudge.py"
+    remind  = f"{project_path}/scripts/remind.py"
 
-    cron_file = Path("/etc/cron.d/second-brain-digest")
+    jobs = [
+        ("Daily digest — 7am", f"0 7 * * *   {actual_user} {python} {digest} --daily >> {log_dir}/digest-daily.log 2>&1"),
+        ("Reminder check — 8am", f"0 8 * * *   {actual_user} {python} {remind} >> {log_dir}/remind.log 2>&1"),
+        ("Nudge check — 6pm (silent if captured recently)", f"0 18 * * *  {actual_user} {python} {nudge} >> {log_dir}/nudge.log 2>&1"),
+        ("Weekly digest — Sunday 8am", f"0 8 * * 0   {actual_user} {python} {digest} --weekly >> {log_dir}/digest-weekly.log 2>&1"),
+        ("Weekly review — Sunday 9am", f"0 9 * * 0   {actual_user} {python} {digest} --review >> {log_dir}/digest-review.log 2>&1"),
+    ]
 
-    # Remove old entries if they exist
-    if cron_file.exists():
-        cron_file.unlink()
+    if CRON_FILE.exists():
+        CRON_FILE.unlink()
 
-    cron_file.write_text(
-        f"# Second Brain digest + nudge cron jobs\n"
-        f"# Daily digest at 7am\n"
-        f"{daily_job}\n"
-        f"# Weekly digest Sunday at 8am\n"
-        f"{weekly_job}\n"
-        f"# Weekly review Sunday at 9am (reflective, includes archived)\n"
-        f"{review_job}\n"
-        f"# Nudge check at 6pm daily (sends only if silent for 2+ days)\n"
-        f"{nudge_job}\n"
-    )
-    print(f"  Wrote {cron_file}")
-    print("  NOTE: Cron jobs will activate once discord/digest.py is built (Phase 4).")
+    lines = ["# Second Brain cron jobs — managed by setup_rpi.py\n"]
+    for label, job in jobs:
+        lines.append(f"# {label}\n{job}\n")
+
+    CRON_FILE.write_text("\n".join(lines))
+    print(f"  Wrote {CRON_FILE}")
+    for label, _ in jobs:
+        print(f"  + {label}")
 
 
 def print_next_steps() -> None:
-    actual_user = os.environ.get("SUDO_USER", "pi")
-    print("\n[4/4] Done! Here's what's running:\n")
-    print("  Discord bot:")
-    print(f"    sudo systemctl status {SERVICE_NAME}")
-    print(f"    sudo journalctl -u {SERVICE_NAME} -f   # live logs")
-    print()
-    print("  Digest cron jobs: installed but waiting for discord/digest.py (Phase 4)")
-    print()
-    print("  Next steps:")
-    print("  1. Complete Gmail API setup (credentials.json in project root)")
-    print("  2. Build Phase 4 with Claude Code (discord/digest.py)")
-    print(f"  3. Run once to authorize Gmail:")
-    print(f"     python3 discord/digest.py --auth")
-    print(f"  4. Test manually:")
-    print(f"     python3 discord/digest.py --daily")
-    print(f"     python3 discord/digest.py --weekly")
-    print()
-    print("  The cron jobs will then run automatically on schedule.")
+    print(f"""
+{'=' * 55}
+  Setup complete! Verify with:
+
+  Discord bot:
+    sudo systemctl status {SERVICE_NAME}
+    sudo journalctl -u {SERVICE_NAME} -f
+
+  Cron jobs:
+    cat {CRON_FILE}
+
+  Test scripts manually:
+    python3 discord/digest.py --daily
+    python3 scripts/remind.py --test
+    python3 scripts/nudge.py --test
+
+  After any code update on dev machine:
+    git pull origin develop
+    sudo systemctl restart {SERVICE_NAME}
+{'=' * 55}
+""")
 
 
 def main() -> None:
@@ -163,6 +188,7 @@ def main() -> None:
     print("=" * 55)
 
     check_root()
+    print("\n[1/4] Checking environment...")
     check_env()
     install_dependencies()
     install_systemd_service()
