@@ -18,7 +18,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 
 def load_env() -> dict:
@@ -40,7 +39,7 @@ def load_env() -> dict:
     return env
 
 
-def api_request(url: str, *, method: str = "GET", body: Optional[dict] = None, headers: dict) -> dict:
+def api_request(url: str, *, method: str = "GET", body: dict | None = None, headers: dict) -> dict:
     data = json.dumps(body).encode("utf-8") if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:

@@ -29,38 +29,23 @@ The Pi is the always-on host for everything that needs to run on a schedule or s
 
 ## Hardware
 
-**Currently planned: Raspberry Pi 1**
+**Raspberry Pi 2 (dedicated)**
 
-The Pi 1 works for this workload — the services are lightweight, mostly idle and waiting on network. However there are important gotchas vs. a newer Pi:
+The Pi 2 is a good fit for this workload — the services are lightweight, mostly idle and waiting on network.
 
-| | Pi 1 | Pi 3B+ / Pi 4 |
-|---|---|---|
-| Architecture | ARMv6 32-bit | ARMv7/ARM64 |
-| RAM | 256–512MB | 1–4GB |
-| CPU | 700MHz single core | 1.2–1.8GHz quad core |
-| OS required | **Legacy Lite (32-bit)** | Current Lite (64-bit) |
-| pip installs | Slow — compiles from source (~20–30 min) | Fast — pre-built wheels |
-| Python version | 3.9 (via apt) | 3.11+ |
+| Spec | Pi 2 |
+|---|---|
+| Architecture | ARMv7 32-bit |
+| RAM | 1GB |
+| CPU | 900MHz quad core |
+| OS | Raspberry Pi OS Lite (32-bit, current) |
+| pip installs | Pre-built ARMv7 wheels — fast |
+| Python | 3.11+ available |
 
-### Pi 1 Gotchas
-
-1. **Use Raspberry Pi OS Legacy Lite (32-bit)** — the current OS (64-bit) does not support Pi 1. In Raspberry Pi Imager, choose: *Raspberry Pi OS (other) → Raspberry Pi OS Legacy Lite (32-bit)*.
-
-2. **pip installs are slow** — `aiohttp` and other packages with C extensions compile from source on ARMv6. Budget 20–30 minutes for the first `pip install`. Run it and walk away.
-
-3. **Python 3.9** — the legacy OS ships with Python 3.9. The scripts use `dict | None` union type hints (Python 3.10+ syntax). These must be replaced with `Optional[dict]` from `typing`. See the **Python 3.9 Compatibility** section below.
-
-4. **Memory is fine** — 256/512MB is enough. The Discord bot idles at ~30–50MB, cron jobs run briefly and exit.
-
-5. **Build tools required for aiohttp** — install before pip:
-   ```bash
-   sudo apt-get install -y python3-dev build-essential libffi-dev
-   ```
-
-### If upgrading hardware later
-
-- **Raspberry Pi 3B+** or **Pi 4 (2GB)** are the natural upgrades
-- Swap the SD card, run the same setup script — everything else is identical
+**Other hardware needed:**
+- MicroSD card (16GB+, Class 10 / A1 rated)
+- Micro USB power supply (2.5A recommended)
+- Case — optional but recommended
 
 ---
 
@@ -92,7 +77,7 @@ GMAIL_RECIPIENT=
 ### Part A — Flash and configure the SD card
 
 1. Download **Raspberry Pi Imager** from raspberrypi.com/software
-2. Flash **Raspberry Pi OS Lite (64-bit)** — no desktop needed
+2. Flash **Raspberry Pi OS Lite (32-bit)** — no desktop needed. Pi 2 is ARMv7, use 32-bit current OS.
 3. Before writing, click the gear icon and configure:
    - Hostname: `secondbrain`
    - Enable SSH
@@ -230,40 +215,9 @@ sudo nano /etc/logrotate.d/second-brain
 
 ---
 
-## Python 3.9 Compatibility
-
-The legacy OS ships with Python 3.9. The following type hint syntax used in the scripts is **Python 3.10+ only** and must be updated before running on the Pi:
-
-| File | Old syntax | Fix |
-|---|---|---|
-| `scripts/brain.py` | `dict \| None` | `from typing import Optional` → `Optional[dict]` |
-| `scripts/nudge.py` | *(none)* | OK as-is |
-| `scripts/remind.py` | *(none)* | OK as-is |
-| `scripts/meeting_prep.py` | *(none)* | OK as-is |
-| `discord/bot.py` | `list[list]`, `list[discord.Message]` | Use `List[...]` from `typing` |
-| `discord/digest.py` | *(none)* | OK as-is |
-| `scripts/setup_rpi.py` | `list[str]` | Use `List[str]` from `typing` |
-
-**Quick fix on the Pi after cloning:**
-```bash
-# Verify Python version
-python3 --version   # should show 3.9.x
-
-# Test for syntax errors before running setup
-python3 -m py_compile discord/bot.py
-python3 -m py_compile scripts/brain.py
-python3 -m py_compile scripts/setup_rpi.py
-```
-
-If any fail, fix the type hints in that file before proceeding.
-
----
-
 ## Known TODOs Before Setup
 
 - [ ] Update `scripts/setup_rpi.py` to include `remind.py` cron job and `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in env check
-- [ ] Fix Python 3.9 type hint incompatibilities (see section above)
-- [ ] Install build tools on Pi before pip: `sudo apt-get install -y python3-dev build-essential libffi-dev`
 - [ ] Confirm `token.json` on dev machine is valid before copying to Pi
 
 ---

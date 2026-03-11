@@ -23,7 +23,6 @@ from pathlib import Path
 
 import aiohttp
 import discord
-from typing import List, Tuple
 
 INBOX_CHANNEL = "sb-inbox"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
@@ -82,7 +81,7 @@ def load_env() -> dict:
     return env
 
 
-def parse_people_flag(text: str) -> Tuple[str, List[str]]:
+def parse_people_flag(text: str) -> tuple[str, list[str]]:
     """Extract --people Name1 Name2 from text. Returns (cleaned_text, people_list)."""
     match = re.search(r"--people\s+(.+?)(?:\s*--|$)", text, re.IGNORECASE)
     if not match:
@@ -188,7 +187,7 @@ def format_thought(t: dict) -> str:
     return "\n".join(lines)
 
 
-def merge_dedupe(people_results: List[list], semantic_results: list) -> list:
+def merge_dedupe(people_results: list[list], semantic_results: list) -> list:
     seen = set()
     merged = []
     for results in people_results:

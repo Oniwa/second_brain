@@ -16,7 +16,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DISCORD_DIR = PROJECT_ROOT / "discord"
@@ -26,7 +25,7 @@ SERVICE_DEST = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
 CRON_MARKER = "# second-brain-digest"
 
 
-def run(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
+def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     print(f"  $ {' '.join(cmd)}")
     return subprocess.run(cmd, check=check)
 
