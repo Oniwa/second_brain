@@ -575,11 +575,11 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Memory migration | ✅ Complete | `scripts/migrate_claude.py` — imports Claude export zip; Haiku filters for relevance, deduplicates semantically |
 | Weekly review synthesis | ✅ Complete | `discord/digest.py --review` — Sunday 9am via Pi cron; includes archived thoughts, pattern analysis, honest reflection |
 | Meeting prep automation | ✅ Complete | `scripts/meeting_prep.py` + `meeting_prep` MCP tool — semantic search + people lookup + Haiku synthesis; invoke via CLI (`--send` for Discord DM) or Claude Code |
-| Meeting prep — Discord trigger | 🔜 | `!prep <meeting description>` in Discord → runs meeting_prep.py → DMs you the brief. Same bot as `#sb-inbox`. |
+| Meeting prep — Discord trigger | ✅ Complete | `!prep <description> [--people Name1 Name2]` in `#sb-inbox` → meeting prep brief in thread |
 | Meeting prep — Calendar trigger | 🔜 | Cron job checks Google Calendar for meetings starting within 30 min; auto-runs meeting prep and DMs brief. Reuses calendar.readonly OAuth scope from Calendar digest integration. |
 | Birthday/follow-up reminders | ✅ Complete | `scripts/remind.py` — daily cron, queries thoughts tagged birthday/anniversary/follow-up/reminder, Haiku identifies what's due in N days, Discord DM if anything upcoming. See design decision below. |
 | Dashboard | 🔜 | Visual thinking patterns. See design decision below. |
-| Discord natural language queries | 🔜 | `!brain <question>` in Discord → semantic search + Claude Haiku synthesis → reply in channel. Full NL query without opening Claude Code. |
+| Discord natural language queries | ✅ Complete | `!brain <question>` in `#sb-inbox` → semantic search + Haiku synthesis → answer in thread |
 | Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
 | Google Calendar digest integration | 🔜 | Pull today's/week's calendar events into daily/weekly digests. Requires adding calendar.readonly OAuth scope to existing Gmail credentials. |
 
