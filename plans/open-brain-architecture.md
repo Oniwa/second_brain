@@ -578,7 +578,7 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Meeting prep — Discord trigger | 🔜 | `!prep <meeting description>` in Discord → runs meeting_prep.py → DMs you the brief. Same bot as `#sb-inbox`. |
 | Meeting prep — Calendar trigger | 🔜 | Cron job checks Google Calendar for meetings starting within 30 min; auto-runs meeting prep and DMs brief. Reuses calendar.readonly OAuth scope from Calendar digest integration. |
 | Birthday/follow-up reminders | ✅ Complete | `scripts/remind.py` — daily cron, queries thoughts tagged birthday/anniversary/follow-up/reminder, Haiku identifies what's due in N days, Discord DM if anything upcoming. See design decision below. |
-| Dashboard | 🔜 | Visual thinking patterns — low priority |
+| Dashboard | 🔜 | Visual thinking patterns. See design decision below. |
 | Discord natural language queries | 🔜 | `!brain <question>` in Discord → semantic search + Claude Haiku synthesis → reply in channel. Full NL query without opening Claude Code. |
 | Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
 | Google Calendar digest integration | 🔜 | Pull today's/week's calendar events into daily/weekly digests. Requires adding calendar.readonly OAuth scope to existing Gmail credentials. |
@@ -611,4 +611,42 @@ A separate Postgres table: `(id, person, date, type, note)`. A new capture path 
 - ⚠️ Duplicates data already in thoughts (person mentioned twice)
 
 **Decision: Option A.** Consistent with the architecture's routing-over-organizing and single-table principles. If Haiku date parsing proves unreliable in practice, migrate to Option B — the thoughts data would still exist and could be backfilled.
+
+---
+
+#### Dashboard — Design Decision
+
+**Option A: Static HTML + Chart.js (chosen)**
+A single self-contained `dashboard/index.html` file. Opens directly in a browser — no server, no hosting. Fetches data from Supabase REST API using the anon key (read-only). Chart.js renders the visualizations client-side. Works offline once opened if data is cached.
+
+- ✅ Zero hosting cost and zero setup
+- ✅ No server process to manage
+- ✅ Works on any machine with the file and internet access
+- ✅ Easy to extend — just edit the HTML
+- ⚠️ Anon key visible in the file — acceptable for a personal tool on a private machine, but don't share the file publicly
+- ⚠️ No auth layer — anyone with the file can read your brain data
+
+**Option B: Python local server**
+`python scripts/dashboard.py` spins up a local HTTP server. Richer charting options (matplotlib, Plotly). Can use the service role key safely since it never leaves your machine.
+
+- ✅ Service role key stays local — more secure
+- ✅ More powerful charting libraries available
+- ⚠️ Requires running a process — more friction to launch
+- ⚠️ Python dependency management
+
+**Option C: Supabase-hosted page**
+Static page hosted on Supabase Storage or served by an Edge Function. Accessible from any device without the file.
+
+- ✅ Access from phone, tablet, any device
+- ⚠️ Requires deployment step on every update
+- ⚠️ Adds hosting complexity to an otherwise simple stack
+
+**Decision: Option A.** Lowest friction, no dependencies, consistent with the project's local-first philosophy. If the anon key exposure becomes a concern or richer charting is needed, migrate to Option B.
+
+**Planned charts:**
+- Captures per day (last 30 days) — bar chart
+- Category breakdown — pie/donut chart
+- Top 10 topics — horizontal bar chart
+- Capture source breakdown — pie chart
+- Thoughts by status (active / needs_review / archived) — donut chart
 
