@@ -219,6 +219,57 @@ async function deleteThought(args: { id: string }): Promise<string> {
   return `Deleted thought ${args.id}.`;
 }
 
+async function meetingPrep(args: {
+  meeting: string;
+  people?: string[];
+}): Promise<string> {
+  const { meeting, people = [] } = args;
+
+  const embedding = await generateEmbedding(meeting);
+
+  // Run semantic search + one people-array query per named person, all in parallel
+  const [semanticResult, ...peopleResults] = await Promise.all([
+    supabase.rpc("semantic_search", {
+      query_embedding: embedding,
+      match_limit: 15,
+      filter_category: null,
+      filter_status: "active",
+    }),
+    ...people.map((person) =>
+      supabase
+        .from("thoughts")
+        .select("id, title, summary, category, people, topics, action_items, source, created_at")
+        .eq("status", "active")
+        .contains("people", [person])
+        .order("created_at", { ascending: false })
+        .limit(10)
+    ),
+  ]);
+
+  if (semanticResult.error) throw new Error(`Search failed: ${semanticResult.error.message}`);
+
+  // Merge and deduplicate — explicit people matches first (highest signal), then semantic
+  const seen = new Set<string>();
+  const merged: Record<string, unknown>[] = [];
+
+  for (const result of peopleResults) {
+    for (const t of (result.data ?? [])) {
+      if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
+    }
+  }
+  for (const t of (semanticResult.data ?? [])) {
+    if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
+  }
+
+  if (merged.length === 0) {
+    return `No relevant context found for "${meeting}". Nothing captured about this yet.`;
+  }
+
+  const peopleLabel = people.length ? ` · people: ${people.join(", ")}` : "";
+  return `**Meeting prep context: "${meeting}"**${peopleLabel}\n(${merged.length} relevant thoughts)\n\n` +
+    merged.map((t) => formatThought(t)).join("\n\n---\n\n");
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -258,7 +309,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.0.0" },
+  { name: "second-brain", version: "1.1.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -370,6 +421,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["topic"],
       },
     },
+    {
+      name: "meeting_prep",
+      description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          meeting: { type: "string", description: "Description of the meeting — topic, purpose, or freeform (e.g. '1:1 with Mike about Q3 pricing')" },
+          people: {
+            type: "array",
+            items: { type: "string" },
+            description: "Names of people in the meeting to look up explicitly (optional but improves recall)",
+          },
+        },
+        required: ["meeting"],
+      },
+    },
   ],
 }));
 
@@ -403,6 +470,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_context":
         text = await getContext(a as Parameters<typeof getContext>[0]);
+        break;
+      case "meeting_prep":
+        text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
