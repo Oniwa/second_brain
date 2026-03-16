@@ -582,6 +582,7 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Discord natural language queries | ✅ Complete | `!brain <question>` in `#sb-inbox` → semantic search + Haiku synthesis → answer in thread |
 | Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
 | Google Calendar digest integration | 🔜 | Pull today's/week's calendar events into daily/weekly digests. Requires adding calendar.readonly OAuth scope to existing Gmail credentials. |
+| URL capture | 🔜 | URLs included in captured thoughts are silently dropped — only `raw_text` preserves them but they're never surfaced. Fix requires: (1) add `url text` column to `thoughts` table via migration, (2) add `"url": "..."` field to the classification JSON schema in `process-thought/index.ts`, (3) update Edge Function insert to include `url`, (4) surface `url` in MCP server tool responses. |
 
 ---
 

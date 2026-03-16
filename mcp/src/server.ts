@@ -270,6 +270,33 @@ async function meetingPrep(args: {
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
 }
 
+async function getThought(args: { id: string }): Promise<string> {
+  const { data, error } = await supabase
+    .from("thoughts")
+    .select("id, raw_text, title, summary, category, people, topics, action_items, source, status, confidence, created_at, updated_at")
+    .eq("id", args.id)
+    .single();
+  if (error) throw new Error(`Lookup failed: ${error.message}`);
+  if (!data) return `No thought found with ID ${args.id}.`;
+
+  const lines = [
+    `**${data.title}** [${data.category}]`,
+    `Status: ${data.status} · Confidence: ${(data.confidence * 100).toFixed(0)}%`,
+    `Source: ${data.source} · Captured: ${new Date(data.created_at).toLocaleDateString()}`,
+    "",
+    `**Summary:** ${data.summary}`,
+    data.people?.length ? `**People:** ${data.people.join(", ")}` : "",
+    data.topics?.length ? `**Topics:** ${data.topics.join(", ")}` : "",
+    data.action_items?.length ? `**Actions:** ${data.action_items.join(" | ")}` : "",
+    "",
+    `**Raw text:**`,
+    data.raw_text,
+    "",
+    `ID: ${data.id}`,
+  ];
+  return lines.filter((l) => l !== undefined && l !== null).join("\n");
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -422,6 +449,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_thought",
+      description: "Fetch a single thought by ID, including its full raw text exactly as captured.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The UUID of the thought to retrieve" },
+        },
+        required: ["id"],
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -467,6 +505,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "delete_thought":
         text = await deleteThought(a as Parameters<typeof deleteThought>[0]);
+        break;
+      case "get_thought":
+        text = await getThought(a as Parameters<typeof getThought>[0]);
         break;
       case "get_context":
         text = await getContext(a as Parameters<typeof getContext>[0]);
