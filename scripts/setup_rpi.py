@@ -131,7 +131,10 @@ def setup_cron() -> None:
     python = "/usr/bin/python3"
     log_dir = f"{project_path}/logs"
 
-    Path(log_dir).mkdir(exist_ok=True)
+    log_path = Path(log_dir)
+    log_path.mkdir(exist_ok=True)
+    import shutil
+    shutil.chown(log_path, user=actual_user, group=actual_user)
 
     digest  = f"{project_path}/discord/digest.py"
     nudge   = f"{project_path}/scripts/nudge.py"
