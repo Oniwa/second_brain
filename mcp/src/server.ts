@@ -66,13 +66,14 @@ async function semanticSearch(args: {
   query: string;
   limit?: number;
   category?: string;
+  status?: string;
 }): Promise<string> {
   const embedding = await generateEmbedding(args.query);
   const { data, error } = await supabase.rpc("semantic_search", {
     query_embedding: embedding,
     match_limit: args.limit ?? 10,
     filter_category: args.category ?? null,
-    filter_status: "active",
+    filter_status: args.status === "all" ? null : (args.status ?? "active"),
   });
   if (error) throw new Error(`Search failed: ${error.message}`);
   if (!data || data.length === 0) return "No matching thoughts found.";
@@ -82,6 +83,7 @@ async function semanticSearch(args: {
 async function listRecent(args: {
   days?: number;
   category?: string;
+  status?: string;
 }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 7));
@@ -89,10 +91,13 @@ async function listRecent(args: {
   let query = supabase
     .from("thoughts")
     .select("id, title, summary, category, people, topics, action_items, source, created_at")
-    .eq("status", "active")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(50);
+
+  if ((args.status ?? "active") !== "all") {
+    query = query.eq("status", args.status ?? "active");
+  }
 
   if (args.category) query = query.eq("category", args.category);
 
@@ -336,7 +341,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.1.0" },
+  { name: "second-brain", version: "1.2.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -355,6 +360,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["person", "project", "idea", "admin", "insight"],
             description: "Filter by category (optional)",
           },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: active)",
+          },
         },
         required: ["query"],
       },
@@ -370,6 +380,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             enum: ["person", "project", "idea", "admin", "insight"],
             description: "Filter by category (optional)",
+          },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: active)",
           },
         },
       },
@@ -417,7 +432,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "archive_thought",
-      description: "Archive a completed thought. It stays in the database for history but won't appear in searches or digests.",
+      description: "Archive a completed thought. Archived thoughts are hidden from default searches but can be found using status: 'archived' or 'all' in semantic_search or list_recent.",
       inputSchema: {
         type: "object",
         properties: {
