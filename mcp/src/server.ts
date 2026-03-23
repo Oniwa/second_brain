@@ -136,16 +136,29 @@ async function getStats(args: { days?: number }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 30));
 
-  const { data, error } = await supabase
-    .from("thoughts")
-    .select("category, topics, created_at, status")
-    .gte("created_at", since.toISOString());
+  const [windowResult, allTimeResult] = await Promise.all([
+    supabase
+      .from("thoughts")
+      .select("category, topics, created_at, status")
+      .gte("created_at", since.toISOString()),
+    supabase
+      .from("thoughts")
+      .select("status"),
+  ]);
 
-  if (error) throw new Error(`Stats failed: ${error.message}`);
-  if (!data || data.length === 0)
-    return `No thoughts in the last ${args.days ?? 30} days.`;
+  if (windowResult.error) throw new Error(`Stats failed: ${windowResult.error.message}`);
+  if (allTimeResult.error) throw new Error(`Stats failed: ${allTimeResult.error.message}`);
 
-  // Category distribution
+  const data = windowResult.data ?? [];
+
+  // All-time status counts
+  const statusCounts: Record<string, number> = {};
+  for (const t of allTimeResult.data ?? []) {
+    statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
+  }
+  const totalAllTime = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+
+  // Time-windowed category and topic distribution
   const cats: Record<string, number> = {};
   const topicCount: Record<string, number> = {};
   for (const t of data) {
@@ -160,19 +173,19 @@ async function getStats(args: { days?: number }): Promise<string> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
-  const needsReview = data.filter((t) => t.status === "needs_review").length;
-
   const lines = [
-    `**Brain stats — last ${args.days ?? 30} days**`,
-    `Total captures: ${data.length}`,
+    "**Brain overview (all time)**",
+    `Total thoughts: ${totalAllTime}`,
+    ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
+    "",
+    `**Trends — last ${args.days ?? 30} days**`,
+    `Captures this period: ${data.length}`,
     "",
     "**By category:**",
     ...sortedCats.map(([cat, n]) => `  ${cat}: ${n}`),
     "",
     "**Top topics:**",
     ...topTopics.map(([topic, n]) => `  ${topic}: ${n}`),
-    "",
-    needsReview > 0 ? `⚠️ ${needsReview} thought(s) need review` : "✓ No thoughts need review",
   ];
   return lines.join("\n");
 }
@@ -341,7 +354,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.2.0" },
+  { name: "second-brain", version: "1.3.0" },
   { capabilities: { tools: {} } },
 );
 
