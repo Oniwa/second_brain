@@ -53,6 +53,9 @@ function formatThought(t: Record<string, unknown>): string {
     t.action_items && (t.action_items as string[]).length
       ? `Actions: ${(t.action_items as string[]).join(" | ")}`
       : "",
+    t.urls && (t.urls as string[]).length
+      ? `URLs: ${(t.urls as string[]).join(" ")}`
+      : "",
     `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}`,
     t.similarity ? `Similarity: ${((t.similarity as number) * 100).toFixed(1)}%` : "",
     `ID: ${t.id}`,
@@ -66,13 +69,14 @@ async function semanticSearch(args: {
   query: string;
   limit?: number;
   category?: string;
+  status?: string;
 }): Promise<string> {
   const embedding = await generateEmbedding(args.query);
   const { data, error } = await supabase.rpc("semantic_search", {
     query_embedding: embedding,
     match_limit: args.limit ?? 10,
     filter_category: args.category ?? null,
-    filter_status: "active",
+    filter_status: args.status === "all" ? null : (args.status ?? "active"),
   });
   if (error) throw new Error(`Search failed: ${error.message}`);
   if (!data || data.length === 0) return "No matching thoughts found.";
@@ -82,17 +86,21 @@ async function semanticSearch(args: {
 async function listRecent(args: {
   days?: number;
   category?: string;
+  status?: string;
 }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 7));
 
   let query = supabase
     .from("thoughts")
-    .select("id, title, summary, category, people, topics, action_items, source, created_at")
-    .eq("status", "active")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(50);
+
+  if ((args.status ?? "active") !== "all") {
+    query = query.eq("status", args.status ?? "active");
+  }
 
   if (args.category) query = query.eq("category", args.category);
 
@@ -131,16 +139,29 @@ async function getStats(args: { days?: number }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 30));
 
-  const { data, error } = await supabase
-    .from("thoughts")
-    .select("category, topics, created_at, status")
-    .gte("created_at", since.toISOString());
+  const [windowResult, allTimeResult] = await Promise.all([
+    supabase
+      .from("thoughts")
+      .select("category, topics, created_at, status")
+      .gte("created_at", since.toISOString()),
+    supabase
+      .from("thoughts")
+      .select("status"),
+  ]);
 
-  if (error) throw new Error(`Stats failed: ${error.message}`);
-  if (!data || data.length === 0)
-    return `No thoughts in the last ${args.days ?? 30} days.`;
+  if (windowResult.error) throw new Error(`Stats failed: ${windowResult.error.message}`);
+  if (allTimeResult.error) throw new Error(`Stats failed: ${allTimeResult.error.message}`);
 
-  // Category distribution
+  const data = windowResult.data ?? [];
+
+  // All-time status counts
+  const statusCounts: Record<string, number> = {};
+  for (const t of allTimeResult.data ?? []) {
+    statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
+  }
+  const totalAllTime = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+
+  // Time-windowed category and topic distribution
   const cats: Record<string, number> = {};
   const topicCount: Record<string, number> = {};
   for (const t of data) {
@@ -155,19 +176,19 @@ async function getStats(args: { days?: number }): Promise<string> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
-  const needsReview = data.filter((t) => t.status === "needs_review").length;
-
   const lines = [
-    `**Brain stats — last ${args.days ?? 30} days**`,
-    `Total captures: ${data.length}`,
+    "**Brain overview (all time)**",
+    `Total thoughts: ${totalAllTime}`,
+    ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
+    "",
+    `**Trends — last ${args.days ?? 30} days**`,
+    `Captures this period: ${data.length}`,
     "",
     "**By category:**",
     ...sortedCats.map(([cat, n]) => `  ${cat}: ${n}`),
     "",
     "**Top topics:**",
     ...topTopics.map(([topic, n]) => `  ${topic}: ${n}`),
-    "",
-    needsReview > 0 ? `⚠️ ${needsReview} thought(s) need review` : "✓ No thoughts need review",
   ];
   return lines.join("\n");
 }
@@ -238,7 +259,7 @@ async function meetingPrep(args: {
     ...people.map((person) =>
       supabase
         .from("thoughts")
-        .select("id, title, summary, category, people, topics, action_items, source, created_at")
+        .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
         .eq("status", "active")
         .contains("people", [person])
         .order("created_at", { ascending: false })
@@ -273,7 +294,7 @@ async function meetingPrep(args: {
 async function getThought(args: { id: string }): Promise<string> {
   const { data, error } = await supabase
     .from("thoughts")
-    .select("id, raw_text, title, summary, category, people, topics, action_items, source, status, confidence, created_at, updated_at")
+    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, created_at, updated_at")
     .eq("id", args.id)
     .single();
   if (error) throw new Error(`Lookup failed: ${error.message}`);
@@ -288,6 +309,7 @@ async function getThought(args: { id: string }): Promise<string> {
     data.people?.length ? `**People:** ${data.people.join(", ")}` : "",
     data.topics?.length ? `**Topics:** ${data.topics.join(", ")}` : "",
     data.action_items?.length ? `**Actions:** ${data.action_items.join(" | ")}` : "",
+    data.urls?.length ? `**URLs:** ${data.urls.join(" ")}` : "",
     "",
     `**Raw text:**`,
     data.raw_text,
@@ -303,7 +325,7 @@ async function getContext(args: { topic: string }): Promise<string> {
     generateEmbedding(args.topic),
     supabase
       .from("thoughts")
-      .select("id, title, summary, category, people, topics, action_items, source, created_at")
+      .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
       .eq("status", "active")
       .contains("topics", [args.topic])
       .order("created_at", { ascending: false })
@@ -336,7 +358,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.1.0" },
+  { name: "second-brain", version: "1.3.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -355,6 +377,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["person", "project", "idea", "admin", "insight"],
             description: "Filter by category (optional)",
           },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: active)",
+          },
         },
         required: ["query"],
       },
@@ -370,6 +397,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             enum: ["person", "project", "idea", "admin", "insight"],
             description: "Filter by category (optional)",
+          },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: active)",
           },
         },
       },
@@ -417,7 +449,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "archive_thought",
-      description: "Archive a completed thought. It stays in the database for history but won't appear in searches or digests.",
+      description: "Archive a completed thought. Archived thoughts are hidden from default searches but can be found using status: 'archived' or 'all' in semantic_search or list_recent.",
       inputSchema: {
         type: "object",
         properties: {

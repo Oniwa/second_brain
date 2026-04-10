@@ -79,7 +79,7 @@ def recent(env: dict, days: int = 7, category: str | None = None) -> None:
         params["category"] = f"eq.{category}"
 
     # Select specific columns
-    params["select"] = "title,category,summary,people,topics,action_items,source,created_at"
+    params["select"] = "title,category,summary,people,topics,action_items,urls,source,created_at"
 
     url = f"{env['SUPABASE_URL']}/rest/v1/thoughts?{urllib.parse.urlencode(params)}"
     headers = {
@@ -186,6 +186,8 @@ def _print_thought(t: dict, similarity: float | None = None) -> None:
         print(f"  Topics:  {', '.join(t['topics'])}")
     if t.get("action_items"):
         print(f"  Actions: {' | '.join(t['action_items'])}")
+    if t.get("urls"):
+        print(f"  URLs:    {' '.join(t['urls'])}")
     captured = t.get("created_at", "")[:10]
     source = t.get("source", "unknown")
     sim_str = f" · {similarity * 100:.1f}% match" if similarity is not None else ""
