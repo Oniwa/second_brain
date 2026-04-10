@@ -583,6 +583,11 @@ After testing digest manually, add two cron entries (`crontab -e`):
 | Digital journal integration | 🔜 | Separate `journal_entries` table for raw daily entries; Haiku distills each entry into insights stored in `thoughts` table. Capture via CLI, Discord, or dedicated journal command. |
 | Google Calendar digest integration | 🔜 | Pull today's/week's calendar events into daily/weekly digests. Requires adding calendar.readonly OAuth scope to existing Gmail credentials. |
 | URL capture | ✅ Complete | `urls text[]` column added via `002_add_urls.sql`. Regex extraction in `process-thought/index.ts` (bypasses LLM). Surfaced in all MCP tools and CLI. Backfill script `scripts/backfill_urls.py` recovered 18 historical URLs. |
+| Panning for Gold Skill | 🔜 | Claude Code skill (markdown). 3-phase discipline: Extract → Evaluate → Synthesize. Turns brain dumps, voice notes, and video notes into structured actionable inventories. No backend changes — works with existing `capture_thought` MCP tool. |
+| Meeting Synthesis Skill | 🔜 | Claude Code skill (markdown). Complements `meeting_prep` — runs *after* a meeting to extract decisions, action items, open questions, and risks from raw notes. No backend changes. |
+| Auto-capture Skill | 🔜 | Claude Code skill (markdown). Automatically captures key items and a session summary when a Claude Code work session ends. Passively populates brain with daily work context. |
+| Content Fingerprint Dedup | 🔜 | Add `content_fingerprint text` column (SHA-256 of `raw_text`) + unique constraint. Check fingerprint in `process-thought` before insert to silently drop duplicates. Prevents same thought being captured twice across Discord, CLI, and MCP. Backfill script for existing rows. |
+| Schema-Aware Routing | 🔜 | Add dedicated `people` and `action_items` tables with relationships back to `thoughts`. LLM router distributes captures across tables. Enables relational queries ("all open action items", "full history with Mike"). Current `people[]`/`action_items[]` arrays remain as denormalized cache. Phase 5 enhancement — defer until data volume makes relational queries necessary. |
 
 ---
 
