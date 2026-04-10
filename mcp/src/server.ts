@@ -15,9 +15,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !OPENAI_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing required environment variables. Check your .env file.");
   process.exit(1);
 }
@@ -27,17 +26,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function generateEmbedding(text: string): Promise<number[]> {
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: "text-embedding-3-small", input: text }),
+    body: JSON.stringify({ text }),
   });
   if (!res.ok) throw new Error(`Embedding failed: ${await res.text()}`);
   const data = await res.json();
-  return data.data[0].embedding;
+  return data.embedding;
 }
 
 function formatThought(t: Record<string, unknown>): string {
