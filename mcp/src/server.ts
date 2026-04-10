@@ -53,6 +53,9 @@ function formatThought(t: Record<string, unknown>): string {
     t.action_items && (t.action_items as string[]).length
       ? `Actions: ${(t.action_items as string[]).join(" | ")}`
       : "",
+    t.urls && (t.urls as string[]).length
+      ? `URLs: ${(t.urls as string[]).join(" ")}`
+      : "",
     `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}`,
     t.similarity ? `Similarity: ${((t.similarity as number) * 100).toFixed(1)}%` : "",
     `ID: ${t.id}`,
@@ -90,7 +93,7 @@ async function listRecent(args: {
 
   let query = supabase
     .from("thoughts")
-    .select("id, title, summary, category, people, topics, action_items, source, created_at")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(50);
@@ -256,7 +259,7 @@ async function meetingPrep(args: {
     ...people.map((person) =>
       supabase
         .from("thoughts")
-        .select("id, title, summary, category, people, topics, action_items, source, created_at")
+        .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
         .eq("status", "active")
         .contains("people", [person])
         .order("created_at", { ascending: false })
@@ -291,7 +294,7 @@ async function meetingPrep(args: {
 async function getThought(args: { id: string }): Promise<string> {
   const { data, error } = await supabase
     .from("thoughts")
-    .select("id, raw_text, title, summary, category, people, topics, action_items, source, status, confidence, created_at, updated_at")
+    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, created_at, updated_at")
     .eq("id", args.id)
     .single();
   if (error) throw new Error(`Lookup failed: ${error.message}`);
@@ -306,6 +309,7 @@ async function getThought(args: { id: string }): Promise<string> {
     data.people?.length ? `**People:** ${data.people.join(", ")}` : "",
     data.topics?.length ? `**Topics:** ${data.topics.join(", ")}` : "",
     data.action_items?.length ? `**Actions:** ${data.action_items.join(" | ")}` : "",
+    data.urls?.length ? `**URLs:** ${data.urls.join(" ")}` : "",
     "",
     `**Raw text:**`,
     data.raw_text,
@@ -321,7 +325,7 @@ async function getContext(args: { topic: string }): Promise<string> {
     generateEmbedding(args.topic),
     supabase
       .from("thoughts")
-      .select("id, title, summary, category, people, topics, action_items, source, created_at")
+      .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
       .eq("status", "active")
       .contains("topics", [args.topic])
       .order("created_at", { ascending: false })

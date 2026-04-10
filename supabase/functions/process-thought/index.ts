@@ -11,6 +11,11 @@ const EMBEDDING_MODEL = "text-embedding-3-small";
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 const SONNET_MODEL = "claude-sonnet-4-6";
 
+const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+function extractUrls(text: string): string[] {
+  return [...text.matchAll(URL_REGEX)].map(m => m[0]);
+}
+
 interface ClassificationResult {
   category: "person" | "project" | "idea" | "admin" | "insight";
   title: string;
@@ -169,6 +174,8 @@ serve(async (req) => {
       ? "active"
       : "needs_review";
 
+    const urls = extractUrls(text.trim());
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data, error } = await supabase
@@ -182,6 +189,7 @@ serve(async (req) => {
         people: classification.people,
         topics: classification.topics,
         action_items: classification.action_items,
+        urls,
         confidence: classification.confidence,
         source,
         status,
