@@ -175,11 +175,17 @@ async function getStats(args: { days?: number }): Promise<string> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
+  const needsReviewCount = statusCounts["needs_review"] ?? 0;
+  const reviewAlert = needsReviewCount > 0
+    ? [`⚠ ${needsReviewCount} thought(s) need review — use get_needs_review to see them`, ""]
+    : [];
+
   const lines = [
     "**Brain overview (all time)**",
     `Total thoughts: ${totalAllTime}`,
     ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
     "",
+    ...reviewAlert,
     `**Trends — last ${args.days ?? 30} days**`,
     `Captures this period: ${data.length}`,
     "",
@@ -318,6 +324,31 @@ async function getThought(args: { id: string }): Promise<string> {
   return lines.filter((l) => l !== undefined && l !== null).join("\n");
 }
 
+async function getNeedsReview(args: { category?: string }): Promise<string> {
+  let query = supabase
+    .from("thoughts")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, confidence, created_at")
+    .eq("status", "needs_review")
+    .order("created_at", { ascending: false });
+
+  if (args.category) query = query.eq("category", args.category);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Needs-review fetch failed: ${error.message}`);
+  if (!data || data.length === 0) return "No thoughts need review.";
+
+  return `**${data.length} thought(s) need review**\n\n` +
+    data.map((t: Record<string, unknown>) => {
+      const conf = typeof t.confidence === "number"
+        ? ` · Confidence: ${(t.confidence * 100).toFixed(0)}%`
+        : "";
+      return formatThought(t).replace(
+        `ID: ${t.id}`,
+        `Confidence: ${typeof t.confidence === "number" ? (t.confidence * 100).toFixed(0) : "?"}% · ID: ${t.id}`
+      ) + conf;
+    }).join("\n\n---\n\n");
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -357,7 +388,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.3.0" },
+  { name: "second-brain", version: "1.4.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -491,6 +522,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_needs_review",
+      description: "Fetch all thoughts that need review — low-confidence captures flagged for correction. Always use this tool when the user asks about thoughts needing review, instead of semantic_search or list_recent.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: ["person", "project", "idea", "admin", "insight"],
+            description: "Filter by category (optional)",
+          },
+        },
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -542,6 +587,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_context":
         text = await getContext(a as Parameters<typeof getContext>[0]);
+        break;
+      case "get_needs_review":
+        text = await getNeedsReview(a as Parameters<typeof getNeedsReview>[0]);
         break;
       case "meeting_prep":
         text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);
