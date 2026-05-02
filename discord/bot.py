@@ -249,6 +249,14 @@ class SecondBrainBot(discord.Client):
             await message.reply(f"Failed to capture: {result['error']}", mention_author=False)
             return
 
+        if result.get("duplicate"):
+            await message.add_reaction("⚠️")
+            await message.reply(
+                f"⚠️ Already in brain: **{result['title']}** [{result['category']}]\nID: `{result['id']}`",
+                mention_author=False,
+            )
+            return
+
         await message.add_reaction("✅")
         confidence = int(result["confidence"] * 100)
         receipt = (

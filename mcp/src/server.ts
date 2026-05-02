@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
@@ -24,6 +25,14 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
 
 async function generateEmbedding(text: string): Promise<number[]> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
@@ -124,6 +133,9 @@ async function captureThought(args: {
     body: JSON.stringify({ text: args.text, source: args.source ?? "mcp" }),
   });
   const data = await res.json();
+  if (data.duplicate) {
+    return `⚠️ Duplicate: already captured as **${data.title}** [${data.category}]\nID: ${data.id}`;
+  }
   if (!res.ok || !data.ok)
     throw new Error(data.error ?? "Capture failed");
   return [
@@ -212,13 +224,33 @@ async function updateThought(args: {
   const { id, ...fields } = args;
   const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
   if (Object.keys(updates).length === 0) return "No fields provided to update.";
+
+  if (updates.raw_text !== undefined) {
+    const hash = hashText(normalizeText(updates.raw_text as string));
+    const { data: existing } = await supabase
+      .from("thoughts")
+      .select("id, title, category")
+      .eq("content_hash", hash)
+      .neq("id", id)
+      .maybeSingle();
+    if (existing) {
+      return `⚠️ Duplicate: that content already exists as **${existing.title}** [${existing.category}]\nID: ${existing.id}`;
+    }
+    updates.content_hash = hash;
+  }
+
   const { data, error } = await supabase
     .from("thoughts")
     .update(updates)
     .eq("id", id)
     .select("title")
     .single();
-  if (error) throw new Error(`Update failed: ${error.message}`);
+  if (error) {
+    if ((error as { code?: string }).code === "23505") {
+      return "⚠️ Duplicate: that content already exists in your brain (concurrent capture).";
+    }
+    throw new Error(`Update failed: ${error.message}`);
+  }
   if (!data) return `No thought found with ID ${id}.`;
   return `Updated: ${data.title}`;
 }
