@@ -515,8 +515,9 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 
 **Close follow-up:**
 3. **Project pages — design first** — 115 project-category thoughts have no dedicated project_name field; need to spec grouping mechanism before implementing. Sample thoughts to decide: topics[] reuse vs. new schema field vs. title prefix. New field is likely correct but requires migration + backfill + Edge Function update.
-4. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
-5. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
+4. **Task Audit tab in `dashboard/index.html`** — add tab showing active thoughts with non-empty action_items[], oldest first. Per-row archive button + optional reason field. Reason appended to raw_text as `[Archived: reason]`. Calls Supabase REST API directly with service role key (local-only dashboard, no Edge Function needed). Fixes digest resurfacing completed tasks.
+5. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
+6. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
 
 **Phase 2:**
 5. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
