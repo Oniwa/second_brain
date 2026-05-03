@@ -10,6 +10,7 @@ Usage:
   python scripts/compile_wiki.py --dry-run
   python scripts/compile_wiki.py --min-thoughts 3 --topic "SHA-256"
   python scripts/compile_wiki.py --best-effort
+  python scripts/compile_wiki.py --skip-existing
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
 """
@@ -484,7 +485,13 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     compiled = 0
     errors = 0
 
+    skipped_existing = 0
+
     for topic, count in sorted(topics_above.items(), key=lambda x: -x[1]):
+        slug = slugify(topic, "topic")
+        if args.skip_existing and slug in existing:
+            skipped_existing += 1
+            continue
         try:
             variants = topic_reverse.get(topic, [topic])
             compile_single_topic(env, topic, variants, dry_run=False)
@@ -496,6 +503,10 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
                 sys.exit(1)
 
     for person, count in sorted(people_above.items(), key=lambda x: -x[1]):
+        slug = slugify(person, "person")
+        if args.skip_existing and slug in existing:
+            skipped_existing += 1
+            continue
         try:
             variants = people_reverse.get(person, [person])
             compile_single_person(env, person, variants, dry_run=False)
@@ -507,6 +518,8 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
                 sys.exit(1)
 
     print(f"\nCompiled: {compiled} page(s)")
+    if skipped_existing:
+        print(f"Skipped:  {skipped_existing} already-compiled page(s) (--skip-existing)")
     if topics_below:
         print(f"Skipped:  {len(topics_below)} topic(s) below threshold of {min_topic} (use --dry-run to see list)")
     if errors:
@@ -529,6 +542,8 @@ def main() -> None:
                         help="Continue on page failures instead of aborting")
     parser.add_argument("--skip-topics", action="store_true", help="Skip topic page compilation")
     parser.add_argument("--skip-people", action="store_true", help="Skip person page compilation")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip pages that already exist in wiki_pages (resume interrupted run)")
 
     args = parser.parse_args()
 
@@ -551,11 +566,23 @@ def main() -> None:
     elif args.topic:
         canonical = topic_aliases.get(args.topic, args.topic)
         variants = topic_reverse.get(canonical, [canonical])
+        if args.skip_existing:
+            existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
+            slug = slugify(canonical, "topic")
+            if slug in existing:
+                print(f"Skipping {canonical} — already compiled (--skip-existing)")
+                return
         compile_single_topic(env, canonical, variants, dry_run=args.dry_run)
 
     elif args.person:
         canonical = people_aliases.get(args.person, args.person)
         variants = people_reverse.get(canonical, [canonical])
+        if args.skip_existing:
+            existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
+            slug = slugify(canonical, "person")
+            if slug in existing:
+                print(f"Skipping {canonical} — already compiled (--skip-existing)")
+                return
         compile_single_person(env, canonical, variants, dry_run=args.dry_run)
 
 
