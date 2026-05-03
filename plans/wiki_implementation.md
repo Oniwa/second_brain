@@ -287,11 +287,18 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 6. Pan skill + MCP `capture_thought` + Edge Function — pass and store `is_external`
 7. Recompile — wiki pages regenerated with `[Source: ...]` labels
 
+### Pre-Cron Hardening (required before scheduling)
+8. Timestamps on run start/end in `compile_wiki.py` output
+9. Exit code 1 when `errors > 0` (add `--strict` flag; default keeps `--best-effort` behavior)
+10. Detect credit exhaustion / rate limit specifically — abort early with clear message rather than burning through N doomed API calls
+11. Discord notification on cron completion — summary line (compiled/skipped/errors) posted as DM via existing bot infrastructure
+12. Log rotation strategy — crontab redirects stdout+stderr to dated log file; keep last 30 days
+
 ### Phase 2 — Graph Layer
-8. `supabase/migrations/006_thought_edges.sql` — `thought_edges` table
-9. `scripts/classify_edges.py` — Haiku filter → Opus classify, cost-capped
-10. Daily stale detection cron (Pi)
-11. Autobiography mode added to `compile_wiki.py`
+13. `supabase/migrations/006_thought_edges.sql` — `thought_edges` table
+14. `scripts/classify_edges.py` — Haiku filter → Opus classify, cost-capped
+15. Daily stale detection cron (Pi)
+16. Autobiography mode added to `compile_wiki.py`
 
 ### Separately — Pan Skill Improvements
 - Always dry-run first (remove the "capture now or review?" prompt)
@@ -494,15 +501,18 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 
 ## Follow-Up Items (Prioritized)
 
+**Before scheduling cron (BLOCKER):**
+1. **Pre-cron hardening** — timestamps, exit code on errors, credit-exhaustion abort, Discord DM notification, log rotation. Do this before adding the Pi cron or cost blowouts will go undetected.
+
 **Next after this (HIGH — multi-client access):**
-1. **Remote HTTP MCP server** — Hono + StreamableHTTP; enables Claude.ai in browser, GitHub Copilot CLI, Claude Desktop
+2. **Remote HTTP MCP server** — Hono + StreamableHTTP; enables Claude.ai in browser, GitHub Copilot CLI, Claude Desktop
 
 **Close follow-up:**
-2. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
-3. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
+3. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
+4. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
 
 **Phase 2:**
-4. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
+5. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
    - Two-stage hybrid: Haiku filters candidate pairs (first 400 chars each, cheap), Opus classifies passing pairs (full context, expensive)
    - Candidate sampling: find thought pairs sharing ≥ 2 topics (GIN overlap query), ranked by overlap count
    - Output includes `direction` (A_to_B | B_to_A | symmetric), `confidence`, `valid_from`, `valid_until`
@@ -518,13 +528,14 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 
 ## Order of Operations
 
-1. Apply `004_wiki_graph.sql` via Supabase MCP plugin
-2. Dry-run: `python scripts/compile_wiki.py --dry-run` to preview topic/person counts
-3. Test single: `python scripts/compile_wiki.py --topic "AI agents"`
-4. Verify MCP: rebuild + restart Claude Code, call `list_wiki_pages`
-5. Run `--all` for full compilation
-6. Add `compiled-wiki/` to `.gitignore`
-7. Add weekly cron on Pi
+1. Apply `004_wiki_graph.sql` via Supabase MCP plugin ✅
+2. Dry-run: `python scripts/compile_wiki.py --dry-run` to preview topic/person counts ✅
+3. Test single: `python scripts/compile_wiki.py --topic "AI agents"` ✅
+4. Verify MCP: rebuild + restart Claude Code, call `list_wiki_pages` ✅
+5. Run `--all` for full compilation ✅ (116 pages — 36 from initial run + 80 resumed with --skip-existing)
+6. Add `compiled-wiki/` to `.gitignore` ✅
+7. **Pre-cron hardening** (timestamps, exit codes, credit-exhaustion abort, Discord notification, log rotation)
+8. Add weekly cron on Pi
 
 ---
 
