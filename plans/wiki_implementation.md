@@ -529,8 +529,9 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 5. **Debate pages** — auto-generated at ≥ 3 contradicts edges
 
 **Later:**
-6. **Stale detection cron** — set `stale=true` when thought_count changes
-7. **Update `open_brain_improvements.md`** — reflect elevated priority of remote HTTP MCP server
+6. **Wiki portability & privacy** — `compiled-wiki/` is already gitignored (not in the public repo). Scope out best approach for moving wiki between machines privately: (a) recompile on demand (~$4, source of truth is Supabase), (b) separate private git repo for compiled-wiki/ only, (c) cloud sync folder (Dropbox/Drive/Syncthing). Person pages in particular may contain sensitive relationship content. Decide before setting up multi-machine workflow.
+7. **Stale detection cron** — set `stale=true` when thought_count changes
+8. **Update `open_brain_improvements.md`** — reflect elevated priority of remote HTTP MCP server
 
 ---
 
