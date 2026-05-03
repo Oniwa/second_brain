@@ -529,7 +529,7 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 5. **Debate pages** — auto-generated at ≥ 3 contradicts edges
 
 **Later:**
-6. **Wiki portability & privacy** — `compiled-wiki/` is already gitignored (not in the public repo). Scope out best approach for moving wiki between machines privately: (a) recompile on demand (~$4, source of truth is Supabase), (b) separate private git repo for compiled-wiki/ only, (c) cloud sync folder (Dropbox/Drive/Syncthing). Person pages in particular may contain sensitive relationship content. Decide before setting up multi-machine workflow.
+6. **Wiki portability — private git repo** — **Decision: separate private GitHub repo for `compiled-wiki/` only.** Recompile-on-demand ruled out (cost — wiki already 10x normal running costs, want to avoid redundant recompiles). Cloud sync ruled out (not all machines have access to same cloud systems). Implementation: create private `second-brain-wiki` repo, init compiled-wiki/ as a nested git repo pointing to it, add optional `--push` flag to `compile_wiki.py` that commits + pushes after a successful compile run. New machine setup: clone private repo into compiled-wiki/. Person pages contain sensitive relationship content — private repo is required, not optional.
 7. **Stale detection cron** — set `stale=true` when thought_count changes
 8. **Update `open_brain_improvements.md`** — reflect elevated priority of remote HTTP MCP server
 
