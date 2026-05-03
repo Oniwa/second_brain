@@ -294,6 +294,12 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 11. Discord notification on cron completion — summary line (compiled/skipped/errors) posted as DM via existing bot infrastructure
 12. Log rotation strategy — crontab redirects stdout+stderr to dated log file; keep last 30 days
 
+### Project Pages — Design First
+13. **Spec**: Sample project-category thoughts to determine how projects are identified (topics[]? new project_name field? title prefix?)
+14. **Decision**: Pick grouping mechanism — likely requires `project_name TEXT` migration + backfill + Edge Function update
+15. **Implement**: Add `--project` and `--skip-projects` flags to `compile_wiki.py`, project system prompt, slug `project-{name}`
+16. Open question: stale detection for projects (project thoughts change status/scope frequently — `created_at` should be displayed prominently per plan)
+
 ### Phase 2 — Graph Layer
 13. `supabase/migrations/006_thought_edges.sql` — `thought_edges` table
 14. `scripts/classify_edges.py` — Haiku filter → Opus classify, cost-capped
@@ -508,8 +514,9 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 2. **Remote HTTP MCP server** — Hono + StreamableHTTP; enables Claude.ai in browser, GitHub Copilot CLI, Claude Desktop
 
 **Close follow-up:**
-3. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
-4. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
+3. **Project pages — design first** — 115 project-category thoughts have no dedicated project_name field; need to spec grouping mechanism before implementing. Sample thoughts to decide: topics[] reuse vs. new schema field vs. title prefix. New field is likely correct but requires migration + backfill + Edge Function update.
+4. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
+5. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
 
 **Phase 2:**
 5. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
