@@ -381,6 +381,41 @@ async function getNeedsReview(args: { category?: string }): Promise<string> {
     }).join("\n\n---\n\n");
 }
 
+async function getWikiPage(args: { slug: string }): Promise<string> {
+  const { data, error } = await supabase
+    .from("wiki_pages")
+    .select("slug, title, content, entity_type, thought_count, stale, last_compiled_at")
+    .eq("slug", args.slug)
+    .single();
+  if (error) throw new Error(`Wiki page lookup failed: ${error.message}`);
+  if (!data) return `No wiki page found with slug "${args.slug}". Run: python scripts/compile_wiki.py --dry-run to see available pages.`;
+  const staleWarning = data.stale
+    ? `\n⚠️ This page is stale — thought count has changed since last compile.\nRun: python scripts/compile_wiki.py --${data.entity_type} "${data.title}"\n\n`
+    : "";
+  return `${staleWarning}${data.content}`;
+}
+
+async function listWikiPages(args: { entity_type?: string }): Promise<string> {
+  let query = supabase
+    .from("wiki_pages")
+    .select("slug, title, entity_type, thought_count, stale, last_compiled_at")
+    .order("entity_type", { ascending: true })
+    .order("thought_count", { ascending: false });
+  if (args.entity_type) query = query.eq("entity_type", args.entity_type);
+  const { data, error } = await query;
+  if (error) throw new Error(`Wiki list failed: ${error.message}`);
+  if (!data || data.length === 0)
+    return "No wiki pages compiled yet. Run: python scripts/compile_wiki.py --all";
+  const header = `**${data.length} wiki page(s)**\n\n${"Slug".padEnd(45)} ${"Type".padEnd(8)} ${"Thoughts".padStart(8)}  Compiled`;
+  const divider = "─".repeat(75);
+  const rows = data.map((p) => {
+    const stale = p.stale ? " ⚠️" : "";
+    const compiled = (p.last_compiled_at as string).slice(0, 10);
+    return `${p.slug.padEnd(45)} ${(p.entity_type as string).padEnd(8)} ${String(p.thought_count).padStart(8)}  ${compiled}${stale}`;
+  });
+  return [header, divider, ...rows].join("\n");
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -420,7 +455,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.4.0" },
+  { name: "second-brain", version: "1.5.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -568,6 +603,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_wiki_page",
+      description: "Fetch a compiled wiki page by slug. Returns full markdown with YAML front-matter. Use list_wiki_pages first to discover available slugs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slug: { type: "string", description: "Page slug (e.g. 'topic-ai-agents', 'person-tammy')" },
+        },
+        required: ["slug"],
+      },
+    },
+    {
+      name: "list_wiki_pages",
+      description: "List all compiled wiki pages with metadata — slug, type, thought count, compile date, stale flag.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: {
+            type: "string",
+            enum: ["topic", "person", "project", "auto"],
+            description: "Filter by page type (optional)",
+          },
+        },
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -622,6 +682,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_needs_review":
         text = await getNeedsReview(a as Parameters<typeof getNeedsReview>[0]);
+        break;
+      case "get_wiki_page":
+        text = await getWikiPage(a as Parameters<typeof getWikiPage>[0]);
+        break;
+      case "list_wiki_pages":
+        text = await listWikiPages(a as Parameters<typeof listWikiPages>[0]);
         break;
       case "meeting_prep":
         text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);
