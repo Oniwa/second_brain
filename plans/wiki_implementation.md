@@ -92,6 +92,39 @@ _Compiled from N thoughts · {date}_
 [Thought IDs + dates + titles]
 ```
 
+**Person page structure (required sections):**
+```markdown
+---
+title: {Name}
+entity_type: person
+entity_name: {Name}
+thought_count: N
+compiled: {date}
+stale: false
+---
+
+# {Name}
+_Compiled from N thoughts · {date}_
+
+## Who They Are
+[Role, context — how you know them, their work/background]
+
+## Key Interactions & History
+[Chronological — significant moments, conversations, patterns]
+
+## What I Know About Them
+[Observations, personality, working style, preferences]
+
+## Open Action Items
+- [Discrete bullet from action_items — never synthesized into prose]
+
+## Related
+[Cross-links to projects, topics they appear in]
+
+## Sources
+[Thought IDs + dates + titles]
+```
+
 **Contradiction handling:**
 - `⚠️ TENSION: [view A, date] vs [view B, date]` — show both, never resolve
 - `→ EVOLVED: [old, date] → [new, date]` — when one clearly supersedes the other
@@ -241,46 +274,74 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 
 ---
 
+## Confirmed Implementation Roadmap
+
+### Wiki MVP (Phase 1 — this session)
+1. `supabase/migrations/004_wiki_graph.sql` — `wiki_pages` table only (thought_edges deferred)
+2. `scripts/compile_wiki.py` — topic + person pages
+3. `mcp/src/server.ts` — add `get_wiki_page` + `list_wiki_pages`
+4. `.gitignore` — add `compiled-wiki/`
+
+### Follow-up 1 — Source Labels
+5. `supabase/migrations/005_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill
+6. Pan skill + MCP `capture_thought` + Edge Function — pass and store `is_external`
+7. Recompile — wiki pages regenerated with `[Source: ...]` labels
+
+### Phase 2 — Graph Layer
+8. `supabase/migrations/006_thought_edges.sql` — `thought_edges` table
+9. `scripts/classify_edges.py` — Haiku filter → Opus classify, cost-capped
+10. Daily stale detection cron (Pi)
+11. Autobiography mode added to `compile_wiki.py`
+
+### Separately — Pan Skill Improvements
+- Always dry-run first (remove the "capture now or review?" prompt)
+- Overlap detection via `semantic_search` before each capture
+
+---
+
+## Key Decisions (from design review)
+
+| Decision | Choice |
+|---|---|
+| Phase 1 page types | Topics (≥5 thoughts) + People (≥2 thoughts) |
+| Admin category | Excluded from topics; **included** for person pages |
+| thought_edges | Deferred to Phase 2 — empty until edge classifier exists |
+| Synthesis model | Sonnet for all pages |
+| Threshold | 5 for topics, 2 for people |
+| Storage | DB authoritative + local `compiled-wiki/` as convenience |
+| Person name canonicalization | Alias map in `scripts/people_aliases.json` |
+| is_external | Post-wiki-MVP follow-up (Path B — wiki ships first) |
+| Source labeling | `is_external=true` + `people[0]` + `urls[0]` → `[Source: Name, url, date]` |
+| Stale detection Phase 1 | Count comparison at compile time; proactive cron in Phase 2 |
+| --dry-run output | Shows both "would compile" and "skipped (below threshold)" with hint commands |
+| Person page sections | Who They Are / Key Interactions & History / What I Know About Them / Open Action Items / Related / Sources |
+
+---
+
+## Current topic/person counts (as of 2026-05-02)
+
+**Topics qualifying at threshold=5: ~64 topics**
+Top 5: AI agents (87), system design (39), prompt engineering (29), agent architecture (26), Claude Code (26)
+
+**People qualifying at threshold=2: 26 people**
+Note: name variants need alias map — Nate B. Jones/Nate B Jones (174 combined), Karpathy/Andre Karpathy/Andrej Karpathy (15 combined)
+
+---
+
 ## Files to Create / Modify
 
 | File | Action |
 |---|---|
 | `supabase/migrations/004_wiki_graph.sql` | CREATE |
 | `scripts/compile_wiki.py` | CREATE |
+| `scripts/people_aliases.json` | CREATE |
+| `scripts/topic_aliases.json` | CREATE |
 | `mcp/src/server.ts` | MODIFY — add 2 tools |
 | `.gitignore` | MODIFY — add `compiled-wiki/` |
 
 ---
 
 ## 1. Migration: `004_wiki_graph.sql`
-
-### `thought_edges` (ported from OB1 typed-reasoning-edges, simplified — no entity-extraction dependency)
-
-```sql
-CREATE TABLE IF NOT EXISTS public.thought_edges (
-  id              BIGSERIAL PRIMARY KEY,
-  from_thought_id UUID NOT NULL REFERENCES public.thoughts(id) ON DELETE CASCADE,
-  to_thought_id   UUID NOT NULL REFERENCES public.thoughts(id) ON DELETE CASCADE,
-  relation        TEXT NOT NULL CHECK (relation IN (
-                    'supports','contradicts','evolved_into',
-                    'supersedes','depends_on','related_to')),
-  confidence      NUMERIC(3,2) CHECK (confidence >= 0 AND confidence <= 1),
-  valid_from      TIMESTAMPTZ,
-  valid_until     TIMESTAMPTZ,
-  classifier_version TEXT,
-  support_count   INT NOT NULL DEFAULT 1,
-  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (from_thought_id, to_thought_id, relation),
-  CHECK (from_thought_id <> to_thought_id)
-);
--- Indexes: (from_thought_id, relation), (to_thought_id, relation),
---          partial WHERE valid_until IS NULL (current edges)
--- RLS: service_role only (mirrors thoughts table posture)
--- thought_edges_upsert() RPC — atomic insert-or-bump-support_count
--- updated_at trigger
-```
 
 ### `wiki_pages`
 
@@ -318,14 +379,33 @@ CREATE TABLE IF NOT EXISTS public.wiki_pages (
 ```
 python scripts/compile_wiki.py --all                    # all topics + people at threshold
 python scripts/compile_wiki.py --topic "AI agents"      # single topic page
-python scripts/compile_wiki.py --person "Mike"          # single person page
-python scripts/compile_wiki.py --auto [--year 2025]     # autobiography
+python scripts/compile_wiki.py --person "Tammy"         # single person page
 python scripts/compile_wiki.py --list                   # list compiled pages from wiki_pages
-python scripts/compile_wiki.py --min-thoughts 3         # threshold (default: 3 topic, 2 person)
-python scripts/compile_wiki.py --dry-run                # show what would compile, no writes
+python scripts/compile_wiki.py --min-thoughts 3         # override threshold for this run
+python scripts/compile_wiki.py --dry-run                # show would-compile + skipped lists, no writes
 python scripts/compile_wiki.py --best-effort            # continue on page failures, log errors
 python scripts/compile_wiki.py --skip-people            # skip person page compilation
 python scripts/compile_wiki.py --skip-topics            # skip topic page compilation
+```
+
+**`--dry-run` output format:**
+```
+WOULD COMPILE (64 topics, 26 people):
+  AI agents           87 thoughts
+  system design       39 thoughts
+  ...
+
+SKIPPED — below threshold of 5 (132 topics):
+  SHA-256              3 thoughts  → --topic "SHA-256" --min-thoughts 3
+  sleep                3 thoughts  → --topic "sleep" --min-thoughts 3
+  ...
+```
+
+**`--all` run prints compile summary at end:**
+```
+Compiled: 64 topic pages, 26 person pages
+Skipped:  132 topics below threshold (use --dry-run to see list)
+Errors:   0
 ```
 
 ### Compilation flow per page
@@ -338,16 +418,49 @@ python scripts/compile_wiki.py --skip-topics            # skip topic page compil
 7. **Write local file** — `compiled-wiki/topics/{slug}.md` or `compiled-wiki/people/{slug}.md`
 8. **Write manifest** — append phase result to `compiled-wiki/compile-manifest.json`: `{slug, entity_type, thought_count, status, compiled_at}`
 
-### Autobiography mode
+### Slug normalization
+Convert entity names to URL-safe slugs:
+- `+` → `p` (C++ → cpp, not c)
+- `#` → `sharp` (C# → csharp)
+- `.` → stripped
+- All other non-alphanumeric → stripped
+- Lowercase, collapse multiple hyphens to one
+
+Examples: `"C++"` → `topic-cpp` · `"Magic: The Gathering"` → `topic-magic-the-gathering` · `"GPT-4o"` → `topic-gpt-4o`
+
+### Topic alias map (`scripts/topic_aliases.json`)
+Same pattern as people aliases. Maps shorthand/variant topic tags to canonical names before grouping:
+```json
+{
+  "mtg": "Magic: The Gathering",
+  "MTG": "Magic: The Gathering"
+}
+```
+Applied at compile time — `mtg`-tagged thoughts fold into `topic-magic-the-gathering`. Update when new shorthand tags appear.
+
+### People alias map (`scripts/people_aliases.json`)
+Loaded at startup. Applied to all `people[]` values before grouping person pages.
+```json
+{
+  "Nate B Jones": "Nate B. Jones",
+  "Andre Karpathy": "Andrej Karpathy",
+  "Karpathy": "Andrej Karpathy"
+}
+```
+Canonical name becomes the slug: `"Andrej Karpathy"` → `person-andrej-karpathy`.
+Update this file when new transcript variants appear — no code changes needed.
+
+### `--all` behavior
+1. Load `people_aliases.json`
+2. Query distinct topic tags with ≥ 5 active non-admin thoughts → compile each
+3. Query all active thoughts, unnest `people[]`, apply alias map, count per canonical name → compile all with ≥ 2
+4. Print compile summary: N compiled, N skipped, any errors
+
+### Autobiography mode (Phase 2 — not in MVP)
 - Fetch all `category IN ('idea', 'insight')` active thoughts
 - Group by `created_at` year
 - Per year (≥ 5 thoughts): synthesize 2-4 paragraph narrative, second-person
 - Write `compiled-wiki/auto/autobiography-{year}.md`
-
-### `--all` behavior
-1. Query distinct topic tags with ≥ 3 active thoughts → compile each
-2. Query distinct people with ≥ 2 active thoughts → compile each
-3. Print compile summary: N pages compiled, N skipped (below threshold), any errors
 
 ---
 
