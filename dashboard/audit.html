@@ -93,6 +93,29 @@
       margin-bottom: 0.4rem;
     }
 
+    .raw-text-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 0.4rem;
+      cursor: pointer;
+      user-select: none;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+
+    .raw-text-toggle:hover { color: var(--secondary); }
+
+    .raw-text-toggle .arrow { font-size: 0.6rem; transition: transform 0.2s; }
+    .raw-text-toggle.open .arrow { transform: rotate(90deg); }
+
     .raw-text {
       background: #0a0d14;
       border: 1px solid var(--border);
@@ -105,7 +128,10 @@
       word-break: break-word;
       line-height: 1.55;
       margin-bottom: 1rem;
+      display: none;
     }
+
+    .raw-text.open { display: block; }
 
     .action-items-list {
       list-style: none;
@@ -312,7 +338,7 @@
       </div>
       <div class="card-meta">${formatDate(thought.created_at)}${thought.source ? ` · ${esc(thought.source)}` : ''}</div>
       ${thought.summary ? `<div class="card-summary">${esc(thought.summary)}</div>` : ''}
-      <div class="field-label">Raw text</div>
+      <button class="raw-text-toggle"><span class="arrow">▶</span> Raw text</button>
       <pre class="raw-text">${esc(thought.raw_text || '')}</pre>
       <div class="field-label">Action items</div>
       <ul class="action-items-list">${actionItemsHtml}</ul>
@@ -326,6 +352,13 @@
     const btn         = card.querySelector('.archive-btn');
     const reasonInput = card.querySelector('.reason-input');
     const inlineError = card.querySelector('.inline-error');
+    const toggle      = card.querySelector('.raw-text-toggle');
+    const rawPre      = card.querySelector('.raw-text');
+
+    toggle.addEventListener('click', () => {
+      const open = rawPre.classList.toggle('open');
+      toggle.classList.toggle('open', open);
+    });
 
     // Allow Enter key in reason field to trigger archive
     reasonInput.addEventListener('keydown', e => {
