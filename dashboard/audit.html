@@ -206,7 +206,6 @@
 
 <script>
   const SUPABASE_URL           = "https://zkdblldjdgadqukpttwl.supabase.co";
-  const SUPABASE_ANON_KEY      = "sb_publishable_4COct64LbSJa2dMNt23Kmw_Drb-qNEV";
   const SUPABASE_SERVICE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZGJsbGRqZGdhZHF1a3B0dHdsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0NDY2NCwiZXhwIjoyMDg4NDIwNjY0fQ.uoqeRdf9DZ3g9V8s2UEae3HkQwM9f9e3w7YHmtPi63U";
 
   // ── Crypto ──────────────────────────────────────────────────────────────────
@@ -226,7 +225,7 @@
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/thoughts?status=eq.active&order=created_at.asc` +
       `&select=id,title,summary,raw_text,category,action_items,source,created_at&limit=500`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
     );
     if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
     const data = await res.json();

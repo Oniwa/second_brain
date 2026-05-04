@@ -111,7 +111,7 @@
 
 <script>
   const SUPABASE_URL    = "https://zkdblldjdgadqukpttwl.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_4COct64LbSJa2dMNt23Kmw_Drb-qNEV";
+  const SUPABASE_KEY    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZGJsbGRqZGdhZHF1a3B0dHdsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0NDY2NCwiZXhwIjoyMDg4NDIwNjY0fQ.uoqeRdf9DZ3g9V8s2UEae3HkQwM9f9e3w7YHmtPi63U";
 
   const PALETTE    = ["#818cf8","#34d399","#fb923c","#f472b6","#60a5fa","#a78bfa","#facc15","#2dd4bf","#f87171","#94a3b8"];
   const GRID_COLOR = "#2d3347";
@@ -125,7 +125,7 @@
   async function fetchAll() {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/thoughts?select=created_at,category,topics,source,status,people&order=created_at.desc&limit=2000`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
     );
     if (!res.ok) throw new Error(`Supabase error ${res.status}: ${await res.text()}`);
     return res.json();
