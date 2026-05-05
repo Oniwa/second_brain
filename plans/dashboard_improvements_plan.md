@@ -90,9 +90,9 @@ Horizontal bar chart alongside existing Top 10 Topics chart. Count of thoughts p
 - ✅ Supabase service role key removed from source; publishable key used in browser
 
 ### Phase 2 — Edit Feature
-- ⏳ Extend `process-thought` Edge Function for update mode (optional `id` param) — **BLOCKER for items below**
-- ⏳ Update MCP `updateThought()` to route through Edge Function for raw_text changes
-- ⏳ Add Discord `!update {id} {new text}` handler in `discord/bot.py`
+- ✅ Extend `process-thought` Edge Function for update mode (optional `id` param) — deployed 2026-05-05
+- ✅ Update MCP `updateThought()` to route through Edge Function for raw_text changes
+- ✅ Add Discord `!update {id} {new text}` handler in `discord/bot.py`
 - ⏳ Add inline raw_text edit to audit.html rows
 
 ### Phase 3 — Additional Charts & Tabs
