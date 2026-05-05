@@ -283,7 +283,7 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 4. `.gitignore` — add `compiled-wiki/`
 
 ### Follow-up 1 — Source Labels
-5. `supabase/migrations/005_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill
+5. `supabase/migrations/005_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill. Backfill rule: `is_external = true` where `raw_text` contains `'Source:'` (catches pan-captured thoughts reliably; may miss earliest pan sessions — good enough).
 6. Edge Function — accept and store `is_external` flag from capture payload
 7. MCP `capture_thought` — pass `is_external` flag
 8. **Pan skill** — after `is_external` migration: include YouTube URL in raw text (so Edge Function extracts it into `urls[]`) and pass `is_external=true` on every capture. Note: existing pan-captured thoughts have `Source: channel | title` in raw text but no URL in `urls[]` — backfill is imprecise, forward captures will be clean.
