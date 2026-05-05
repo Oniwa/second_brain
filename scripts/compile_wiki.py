@@ -9,7 +9,7 @@ Usage:
   python scripts/compile_wiki.py --list
   python scripts/compile_wiki.py --dry-run
   python scripts/compile_wiki.py --min-thoughts 3 --topic "SHA-256"
-  python scripts/compile_wiki.py --best-effort
+  python scripts/compile_wiki.py --strict
   python scripts/compile_wiki.py --skip-existing
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
@@ -31,6 +31,13 @@ SONNET_MODEL = "claude-sonnet-4-6"
 DEFAULT_TOPIC_THRESHOLD = 5
 DEFAULT_PERSON_THRESHOLD = 2
 OUTPUT_DIR = Path(__file__).parent.parent / "compiled-wiki"
+
+
+class SystemicAPIError(Exception):
+    """Raised when an Anthropic API error indicates the whole run is doomed.
+    Callers should abort immediately rather than continuing to the next page."""
+    pass
+
 
 TOPIC_SYSTEM_PROMPT = """\
 You are a knowledge synthesis agent maintaining a personal wiki for a second brain system.
@@ -146,7 +153,8 @@ def load_env() -> dict:
                     continue
                 key, _, value = line.partition("=")
                 env[key.strip()] = value.strip()
-    for key in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "ANTHROPIC_API_KEY"):
+    for key in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "ANTHROPIC_API_KEY",
+                "DISCORD_BOT_TOKEN", "DISCORD_USER_ID"):
         if key in os.environ:
             env[key] = os.environ[key]
     return env
@@ -185,6 +193,12 @@ def slugify(name: str, prefix: str) -> str:
 def strip_control_chars(text: str) -> str:
     return "".join(ch for ch in text if unicodedata.category(ch)[0] != "C" or ch in "\n\r\t")
 
+
+def fmt_elapsed(seconds: int) -> str:
+    return f"{seconds // 60}m {seconds % 60}s" if seconds >= 60 else f"{seconds}s"
+
+
+# ── Supabase ─────────────────────────────────────────────────────────────────
 
 def supabase_get(url: str, key: str, path: str, params: dict) -> list:
     qs = urllib.parse.urlencode(params)
@@ -226,6 +240,17 @@ def supabase_upsert(url: str, key: str, data: dict) -> dict:
         raise RuntimeError(f"Supabase upsert error {e.code}: {raw}") from e
 
 
+# ── Anthropic ────────────────────────────────────────────────────────────────
+
+# HTTP status codes that indicate the entire run is doomed — no point continuing.
+_SYSTEMIC_CODES = {
+    401,  # invalid API key
+    403,  # credit exhausted / billing issue
+    429,  # rate limit — batch won't self-recover
+    529,  # Anthropic overloaded
+}
+
+
 def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> str:
     body = json.dumps({
         "model": SONNET_MODEL,
@@ -249,8 +274,67 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
             return data["content"][0]["text"].strip()
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8")
+        if e.code in _SYSTEMIC_CODES:
+            raise SystemicAPIError(f"Anthropic API error {e.code} (systemic — aborting run): {raw}") from e
         raise RuntimeError(f"Anthropic API error {e.code}: {raw}") from e
 
+
+# ── Discord ───────────────────────────────────────────────────────────────────
+
+def send_discord_dm(token: str, user_id: str, message: str) -> None:
+    """Send a DM to the configured user via the Discord bot. Fails silently."""
+    try:
+        # Open DM channel
+        body = json.dumps({"recipient_id": user_id}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://discord.com/api/v10/users/@me/channels",
+            data=body,
+            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            channel_id = json.loads(resp.read().decode("utf-8"))["id"]
+
+        # Send message
+        body = json.dumps({"content": message}).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            data=body,
+            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+    except Exception as e:
+        print(f"  Warning: Discord DM failed: {e}", file=sys.stderr)
+
+
+def _build_dm(compiled: int, errors: int, error_details: list[str],
+              elapsed_s: int, run_ts: str, aborted: bool = False,
+              abort_reason: str = "") -> str:
+    if aborted:
+        lines = [
+            f"🧠 Wiki compile ABORTED — {run_ts}",
+            f"✅ Compiled before abort: {compiled} page(s)",
+            f"❌ Aborted: {abort_reason}",
+            f"⏱ {fmt_elapsed(elapsed_s)}",
+        ]
+    elif errors:
+        lines = [
+            f"🧠 Wiki compile complete (with errors) — {run_ts}",
+            f"✅ Compiled: {compiled} page(s)",
+            f"❌ Errors:   {errors}",
+        ] + [f"   {d}" for d in error_details] + [f"⏱ {fmt_elapsed(elapsed_s)}"]
+    else:
+        lines = [
+            f"🧠 Wiki compile complete — {run_ts}",
+            f"✅ Compiled: {compiled} page(s)",
+            f"⏱ {fmt_elapsed(elapsed_s)}",
+        ]
+    return "\n".join(lines)
+
+
+# ── Thought fetching ──────────────────────────────────────────────────────────
 
 def fetch_thoughts_for_topic(supabase_url: str, key: str, topic: str) -> list:
     return supabase_get(supabase_url, key, "/rest/v1/thoughts", {
@@ -314,6 +398,8 @@ def fence_thoughts(thoughts: list) -> str:
     return "\n\n".join(parts)
 
 
+# ── Entity queries ────────────────────────────────────────────────────────────
+
 def get_distinct_topics(supabase_url: str, key: str, topic_aliases: dict) -> dict:
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
@@ -351,6 +437,8 @@ def get_existing_pages(supabase_url: str, key: str) -> dict:
     return {p["slug"]: p for p in pages}
 
 
+# ── Page writing ──────────────────────────────────────────────────────────────
+
 def write_page(env: dict, slug: str, entity_type: str, entity_name: str, content: str, thought_count: int) -> None:
     now = datetime.now(timezone.utc).isoformat()
     supabase_upsert(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], {
@@ -371,6 +459,8 @@ def write_page(env: dict, slug: str, entity_type: str, entity_name: str, content
     except OSError as e:
         print(f"  Warning: could not write local file {out_path}: {e}", file=sys.stderr)
 
+
+# ── Single-entity compile ─────────────────────────────────────────────────────
 
 def compile_single_topic(env: dict, canonical: str, variants: list, dry_run: bool) -> None:
     slug = slugify(canonical, "topic")
@@ -416,6 +506,8 @@ def compile_single_person(env: dict, canonical: str, variants: list, dry_run: bo
     print("✓")
 
 
+# ── Commands ──────────────────────────────────────────────────────────────────
+
 def cmd_list(env: dict) -> None:
     pages = supabase_get(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], "/rest/v1/wiki_pages", {
         "select": "slug,title,entity_type,thought_count,stale,last_compiled_at",
@@ -435,6 +527,9 @@ def cmd_list(env: dict) -> None:
 
 
 def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_aliases: dict) -> None:
+    run_start = datetime.now(timezone.utc)
+    run_ts = run_start.strftime("%Y-%m-%d %H:%M:%S UTC")
+
     min_topic = args.min_thoughts if args.min_thoughts is not None else DEFAULT_TOPIC_THRESHOLD
     min_person = args.min_thoughts if args.min_thoughts is not None else DEFAULT_PERSON_THRESHOLD
     people_reverse = build_reverse_map(people_aliases)
@@ -482,10 +577,29 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         print(f"\nTotal: {len(topics_above) + len(people_above)} pages would compile, {len(topics_below)} topics skipped")
         return
 
+    # Real compile run — print start timestamp
+    print(f"Started: {run_ts}")
+
     compiled = 0
     errors = 0
-
     skipped_existing = 0
+    error_details: list[str] = []
+
+    discord_token = env.get("DISCORD_BOT_TOKEN")
+    discord_user  = env.get("DISCORD_USER_ID")
+
+    def elapsed_now() -> int:
+        return int((datetime.now(timezone.utc) - run_start).total_seconds())
+
+    def notify_and_exit(aborted: bool = False, abort_reason: str = "", exit_code: int = 1) -> None:
+        elapsed_s = elapsed_now()
+        finish_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        print(f"Finished: {finish_ts} ({fmt_elapsed(elapsed_s)})")
+        if discord_token and discord_user:
+            dm = _build_dm(compiled, errors, error_details, elapsed_s, run_ts,
+                           aborted=aborted, abort_reason=abort_reason)
+            send_discord_dm(discord_token, discord_user, dm)
+        sys.exit(exit_code)
 
     for topic, count in sorted(topics_above.items(), key=lambda x: -x[1]):
         slug = slugify(topic, "topic")
@@ -496,11 +610,15 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             variants = topic_reverse.get(topic, [topic])
             compile_single_topic(env, topic, variants, dry_run=False)
             compiled += 1
+        except SystemicAPIError as e:
+            print(f"\n  ABORT (systemic): {e}", file=sys.stderr)
+            errors += 1
+            notify_and_exit(aborted=True, abort_reason=str(e), exit_code=1)
         except Exception as e:
             errors += 1
+            detail = f"• topic:{topic}: {e}"
+            error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
-            if not args.best_effort:
-                sys.exit(1)
 
     for person, count in sorted(people_above.items(), key=lambda x: -x[1]):
         slug = slugify(person, "person")
@@ -511,11 +629,15 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             variants = people_reverse.get(person, [person])
             compile_single_person(env, person, variants, dry_run=False)
             compiled += 1
+        except SystemicAPIError as e:
+            print(f"\n  ABORT (systemic): {e}", file=sys.stderr)
+            errors += 1
+            notify_and_exit(aborted=True, abort_reason=str(e), exit_code=1)
         except Exception as e:
             errors += 1
+            detail = f"• person:{person}: {e}"
+            error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
-            if not args.best_effort:
-                sys.exit(1)
 
     print(f"\nCompiled: {compiled} page(s)")
     if skipped_existing:
@@ -525,6 +647,11 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     if errors:
         print(f"Errors:   {errors}")
 
+    exit_code = 1 if (errors > 0 and args.strict) else 0
+    notify_and_exit(exit_code=exit_code)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compile wiki pages from second brain thoughts")
@@ -538,8 +665,10 @@ def main() -> None:
                         help="Override threshold (default: 5 topics, 2 people)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would compile without writing anything")
+    parser.add_argument("--strict", action="store_true",
+                        help="Exit 1 if any page errors occurred (for cron monitoring)")
     parser.add_argument("--best-effort", action="store_true",
-                        help="Continue on page failures instead of aborting")
+                        help="Deprecated — best-effort is now the default")
     parser.add_argument("--skip-topics", action="store_true", help="Skip topic page compilation")
     parser.add_argument("--skip-people", action="store_true", help="Skip person page compilation")
     parser.add_argument("--skip-existing", action="store_true",
@@ -572,7 +701,11 @@ def main() -> None:
             if slug in existing:
                 print(f"Skipping {canonical} — already compiled (--skip-existing)")
                 return
+        if not args.dry_run:
+            print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         compile_single_topic(env, canonical, variants, dry_run=args.dry_run)
+        if not args.dry_run:
+            print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
     elif args.person:
         canonical = people_aliases.get(args.person, args.person)
@@ -583,7 +716,11 @@ def main() -> None:
             if slug in existing:
                 print(f"Skipping {canonical} — already compiled (--skip-existing)")
                 return
+        if not args.dry_run:
+            print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         compile_single_person(env, canonical, variants, dry_run=args.dry_run)
+        if not args.dry_run:
+            print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
 
 if __name__ == "__main__":
