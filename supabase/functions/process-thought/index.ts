@@ -140,7 +140,7 @@ serve(async (req) => {
     });
   }
 
-  let body: { text: string; source?: string };
+  let body: { text: string; source?: string; id?: string };
   try {
     body = await req.json();
   } catch {
@@ -150,7 +150,7 @@ serve(async (req) => {
     });
   }
 
-  const { text, source = "api" } = body;
+  const { text, source = "api", id } = body;
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return new Response(JSON.stringify({ error: "text field is required" }), {
@@ -162,17 +162,93 @@ serve(async (req) => {
   try {
     const trimmed = text.trim();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Duplicate check before any LLM calls
     const contentHash = await hashText(normalizeText(trimmed));
-    const { data: existing } = await supabase
+
+    if (id) {
+      // Update mode — re-embed and re-classify, preserve status
+      const { data: existing, error: fetchError } = await supabase
+        .from("thoughts")
+        .select("id, status")
+        .eq("id", id)
+        .single();
+      if (fetchError || !existing) {
+        return new Response(JSON.stringify({ error: `No thought found with ID ${id}` }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
+      const { data: duplicate } = await supabase
+        .from("thoughts")
+        .select("id, title, category")
+        .eq("content_hash", contentHash)
+        .neq("id", id)
+        .maybeSingle();
+      if (duplicate) {
+        return new Response(
+          JSON.stringify({ ok: false, duplicate: true, id: duplicate.id, title: duplicate.title, category: duplicate.category }),
+          { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+
+      const [embedding, haikusResult] = await Promise.all([
+        generateEmbedding(trimmed),
+        classify(trimmed, HAIKU_MODEL),
+      ]);
+
+      let classification = haikusResult;
+      let model_used = HAIKU_MODEL;
+
+      if (classification.confidence < CONFIDENCE_THRESHOLD) {
+        console.log(`Low confidence (${classification.confidence}) — escalating to Sonnet`);
+        classification = await classify(trimmed, SONNET_MODEL);
+        model_used = SONNET_MODEL;
+      }
+
+      const urls = extractUrls(trimmed);
+
+      const { data, error } = await supabase
+        .from("thoughts")
+        .update({
+          raw_text: trimmed,
+          embedding,
+          category: classification.category,
+          title: classification.title,
+          summary: classification.summary,
+          people: classification.people,
+          topics: classification.topics,
+          action_items: classification.action_items,
+          urls,
+          confidence: classification.confidence,
+          content_hash: contentHash,
+        })
+        .eq("id", id)
+        .select("id, title, category, confidence, status")
+        .single();
+
+      if (error) throw new Error(`Database update failed: ${error.message}`);
+      if (!data) {
+        return new Response(JSON.stringify({ error: `No thought found with ID ${id}` }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, updated: true, id: data.id, title: data.title, category: data.category, confidence: data.confidence, status: data.status, model_used }),
+        { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
+    // Insert mode — duplicate check before any LLM calls
+    const { data: existingDup } = await supabase
       .from("thoughts")
       .select("id, title, category")
       .eq("content_hash", contentHash)
       .maybeSingle();
-    if (existing) {
+    if (existingDup) {
       return new Response(
-        JSON.stringify({ ok: false, duplicate: true, id: existing.id, title: existing.title, category: existing.category }),
+        JSON.stringify({ ok: false, duplicate: true, id: existingDup.id, title: existingDup.title, category: existingDup.category }),
         { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
       );
     }

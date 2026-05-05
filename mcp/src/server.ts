@@ -5,7 +5,6 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createClient } from "@supabase/supabase-js";
-import { createHash } from "crypto";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
@@ -25,14 +24,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/\s+/g, " ");
-}
-
-function hashText(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
-}
 
 async function generateEmbedding(text: string): Promise<number[]> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
@@ -221,27 +212,44 @@ async function updateThought(args: {
   action_items?: string[];
   status?: string;
 }): Promise<string> {
-  const { id, ...fields } = args;
-  const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
-  if (Object.keys(updates).length === 0) return "No fields provided to update.";
+  const { id, raw_text, ...rest } = args;
+  const otherFields = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
 
-  if (updates.raw_text !== undefined) {
-    const hash = hashText(normalizeText(updates.raw_text as string));
-    const { data: existing } = await supabase
-      .from("thoughts")
-      .select("id, title, category")
-      .eq("content_hash", hash)
-      .neq("id", id)
-      .maybeSingle();
-    if (existing) {
-      return `⚠️ Duplicate: that content already exists as **${existing.title}** [${existing.category}]\nID: ${existing.id}`;
+  if (raw_text !== undefined) {
+    // Route through Edge Function for re-embed + re-classify + hash update
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ text: raw_text, id, source: "mcp" }),
+    });
+    const data = await res.json();
+    if (data.duplicate) {
+      return `⚠️ Duplicate: that content already exists as **${data.title}** [${data.category}]\nID: ${data.id}`;
     }
-    updates.content_hash = hash;
+    if (!res.ok || !data.ok) throw new Error(data.error ?? "Update via Edge Function failed");
+
+    let result = `Updated: **${data.title}** [${data.category}] (confidence: ${(data.confidence * 100).toFixed(0)}%)`;
+
+    // Apply any additional explicit field overrides on top of re-classification
+    if (Object.keys(otherFields).length > 0) {
+      const { error } = await supabase
+        .from("thoughts")
+        .update(otherFields)
+        .eq("id", id);
+      if (error) throw new Error(`Secondary field patch failed: ${error.message}`);
+    }
+    return result;
   }
+
+  // No raw_text — direct DB update, no re-embedding
+  if (Object.keys(otherFields).length === 0) return "No fields provided to update.";
 
   const { data, error } = await supabase
     .from("thoughts")
-    .update(updates)
+    .update(otherFields)
     .eq("id", id)
     .select("title")
     .single();
