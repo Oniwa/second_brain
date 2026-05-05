@@ -140,7 +140,7 @@ serve(async (req) => {
     });
   }
 
-  let body: { text: string; source?: string; id?: string };
+  let body: { text: string; source?: string; id?: string; is_external?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -150,7 +150,7 @@ serve(async (req) => {
     });
   }
 
-  const { text, source = "api", id } = body;
+  const { text, source = "api", id, is_external = false } = body;
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return new Response(JSON.stringify({ error: "text field is required" }), {
@@ -207,21 +207,24 @@ serve(async (req) => {
 
       const urls = extractUrls(trimmed);
 
+      const updatePayload: Record<string, unknown> = {
+        raw_text: trimmed,
+        embedding,
+        category: classification.category,
+        title: classification.title,
+        summary: classification.summary,
+        people: classification.people,
+        topics: classification.topics,
+        action_items: classification.action_items,
+        urls,
+        confidence: classification.confidence,
+        content_hash: contentHash,
+      };
+      if (body.is_external !== undefined) updatePayload.is_external = is_external;
+
       const { data, error } = await supabase
         .from("thoughts")
-        .update({
-          raw_text: trimmed,
-          embedding,
-          category: classification.category,
-          title: classification.title,
-          summary: classification.summary,
-          people: classification.people,
-          topics: classification.topics,
-          action_items: classification.action_items,
-          urls,
-          confidence: classification.confidence,
-          content_hash: contentHash,
-        })
+        .update(updatePayload)
         .eq("id", id)
         .select("id, title, category, confidence, status")
         .single();
@@ -294,6 +297,7 @@ serve(async (req) => {
         source,
         status,
         content_hash: contentHash,
+        is_external,
       })
       .select("id, title, category, confidence, status")
       .single();

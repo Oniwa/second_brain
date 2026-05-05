@@ -114,6 +114,7 @@ async function listRecent(args: {
 async function captureThought(args: {
   text: string;
   source?: string;
+  is_external?: boolean;
 }): Promise<string> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
     method: "POST",
@@ -121,7 +122,7 @@ async function captureThought(args: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     },
-    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp" }),
+    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp", is_external: args.is_external ?? false }),
   });
   const data = await res.json();
   if (data.duplicate) {
@@ -519,6 +520,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           text: { type: "string", description: "The thought to capture" },
           source: { type: "string", description: "Where this came from (default: mcp)" },
+          is_external: { type: "boolean", description: "True if this thought originates from an external source (YouTube, article, book). Default false." },
         },
         required: ["text"],
       },
