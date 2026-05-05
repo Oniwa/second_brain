@@ -284,8 +284,10 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 
 ### Follow-up 1 — Source Labels
 5. `supabase/migrations/005_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill
-6. Pan skill + MCP `capture_thought` + Edge Function — pass and store `is_external`
-7. Recompile — wiki pages regenerated with `[Source: ...]` labels
+6. Edge Function — accept and store `is_external` flag from capture payload
+7. MCP `capture_thought` — pass `is_external` flag
+8. **Pan skill** — after `is_external` migration: include YouTube URL in raw text (so Edge Function extracts it into `urls[]`) and pass `is_external=true` on every capture. Note: existing pan-captured thoughts have `Source: channel | title` in raw text but no URL in `urls[]` — backfill is imprecise, forward captures will be clean.
+9. Recompile — wiki pages regenerated with `[Source: ...]` labels
 
 ### Pre-Cron Hardening (required before scheduling)
 8. Timestamps on run start/end in `compile_wiki.py` output
@@ -309,6 +311,7 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 ### Separately — Pan Skill Improvements
 - Always dry-run first (remove the "capture now or review?" prompt)
 - Overlap detection via `semantic_search` before each capture
+- URL in captures: blocked on `is_external` migration (see Follow-up 1, step 8)
 
 ---
 
