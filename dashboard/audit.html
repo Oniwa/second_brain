@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Second Brain — Audit</title>
   <link rel="stylesheet" href="shared.css" />
+  <script src="config.js"></script>
   <style>
     header {
       display: flex;
@@ -231,8 +232,8 @@
 </div>
 
 <script>
-  const SUPABASE_URL           = "https://zkdblldjdgadqukpttwl.supabase.co";
-  const SUPABASE_SERVICE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZGJsbGRqZGdhZHF1a3B0dHdsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0NDY2NCwiZXhwIjoyMDg4NDIwNjY0fQ.uoqeRdf9DZ3g9V8s2UEae3HkQwM9f9e3w7YHmtPi63U";
+  const SUPABASE_URL         = window.SUPABASE_URL;
+  const SUPABASE_SERVICE_KEY = window.SUPABASE_SERVICE_KEY;
 
   // ── Crypto ──────────────────────────────────────────────────────────────────
 
