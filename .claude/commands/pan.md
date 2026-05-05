@@ -12,14 +12,18 @@ Optionally, the user may add `--commit` to skip the dry-run review and capture i
 
 ## Step 0 — Fetch Transcript (YouTube URLs only)
 
-If the input is a YouTube URL, run the transcript tool first:
+If the input is a YouTube URL, locate the `youtube_transcript` project and run `main.py`. Known locations (check in order):
 
-```bash
-cd C:\projects\youtube_transcript && \
-  .venv\Scripts\python main.py <URL> --output C:\temp\pan_transcript.txt
-```
+| Machine | Project path | Python executable |
+|---|---|---|
+| Windows (home PC) | `C:\projects\youtube_transcript` | `C:\Users\strea\Envs\youtube_transcript\Scripts\python.exe` |
+| Linux / Pi | `/home/oniwa/PycharmProjects/youtube_transcript` | `.venv/bin/python` |
 
-Then read `C:\temp\pan_transcript.txt` as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
+Output file: use a temp path appropriate for the OS (`C:\temp\pan_transcript.txt` on Windows, `/tmp/pan_transcript.txt` on Linux). Create the temp directory if it doesn't exist.
+
+If the project isn't found at any known path, stop and ask the user where it lives before proceeding.
+
+Then read the output file as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
 
 If the transcript fetch fails (video unavailable, transcripts disabled, IP blocked), stop and tell the user.
 
