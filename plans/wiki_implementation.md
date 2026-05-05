@@ -543,8 +543,8 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 4. Verify MCP: rebuild + restart Claude Code, call `list_wiki_pages` ✅
 5. Run `--all` for full compilation ✅ (116 pages — 36 from initial run + 80 resumed with --skip-existing)
 6. Add `compiled-wiki/` to `.gitignore` ✅
-7. **Pre-cron hardening** (timestamps, exit codes, credit-exhaustion abort, Discord notification, log rotation)
-8. Add weekly cron on Pi
+7. **Pre-cron hardening** ✅ (timestamps, exit codes, systemic error abort, Discord DM notification; log rotation deferred to crontab config)
+8. Add weekly cron — ⏳ location TBD (Pi locks wiki to home network; need to decide where compiled-wiki/ should live before scheduling)
 
 ---
 
