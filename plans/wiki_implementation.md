@@ -309,9 +309,26 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 16. Autobiography mode added to `compile_wiki.py`
 
 ### Separately — Pan Skill Improvements
-- Always dry-run first (remove the "capture now or review?" prompt)
-- Overlap detection via `semantic_search` before each capture
-- URL in captures: blocked on `is_external` migration (see Follow-up 1, step 8)
+- ✓ Always dry-run first (`--commit` flag to skip; default is always preview)
+- ✓ Reason required for every Phase 2 score (specific why, not just badge)
+- ✓ Phase 2.5 Draft — first-pass trim of capture text before committing
+- ✓ `is_external: true` when URL provided; `Source: <url>` appended to raw text
+- Overlap detection via `semantic_search` in Phase 2 — see spec below
+- ✓ URL in captures: unblocked by `is_external` migration
+
+### Pan Skill — Overlap Detection Spec
+
+Run `semantic_search` for each extracted item during Phase 2 scoring, before assigning a score.
+
+| Decision | Choice |
+|---|---|
+| When | Phase 2 — before scoring each item, so overlap can change ✅ → ⚠️ or ❌ |
+| Threshold | 85% similarity |
+| Results shown | Top 2 matches above threshold |
+| Display | Full match block below the item: title + summary + similarity %; include recommendation to keep or downgrade |
+| User action | Final call on score — keep ✅, downgrade to ⚠️ or ❌ |
+| No overlap | Silent — nothing shown |
+| Update existing | Deferred to Future Enhancements (test the workflow first) |
 
 ---
 

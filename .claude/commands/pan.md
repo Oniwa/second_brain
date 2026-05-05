@@ -8,18 +8,18 @@ The user provides one of:
 - A YouTube URL (e.g. `https://youtu.be/FtCdYhspm7w`)
 - Raw text (transcript, brain dump, meeting notes, article)
 
-Optionally, the user may add `--dry-run` to preview all captures without writing anything to the brain.
+Optionally, the user may add `--commit` to skip the dry-run review and capture immediately.
 
 ## Step 0 — Fetch Transcript (YouTube URLs only)
 
 If the input is a YouTube URL, run the transcript tool first:
 
 ```bash
-cd /home/oniwa/PycharmProjects/youtube_transcript && \
-  .venv/bin/python main.py <URL> --output /tmp/pan_transcript.txt
+cd C:\projects\youtube_transcript && \
+  .venv\Scripts\python main.py <URL> --output C:\temp\pan_transcript.txt
 ```
 
-Then read `/tmp/pan_transcript.txt` as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
+Then read `C:\temp\pan_transcript.txt` as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
 
 If the transcript fetch fails (video unavailable, transcripts disabled, IP blocked), stop and tell the user.
 
@@ -57,7 +57,19 @@ Do not skip lines because they seem obvious or repetitive. The discipline is to 
 
 ## Phase 2 — Evaluate
 
-For each extracted item, assign a score:
+For each extracted item:
+
+**Step 1 — Overlap check:** Call `semantic_search` with the item text (limit 2). If any result has similarity ≥ 85%, show a match block directly below the item:
+
+```
+  ~ Overlap detected (92%) — "Layered agentic architecture"
+    Summary: Separate memory, compute, and interface into distinct layers for independent replaceability.
+    Recommendation: downgrade to ⚠️ — brain already has this principle; only keep if this source adds new nuance.
+```
+
+If no matches are above 85%, say nothing.
+
+**Step 2 — Score with reason:** Assign a score **and a one-line reason**, taking any overlap into account:
 
 | Score | Meaning |
 |-------|---------|
@@ -65,29 +77,60 @@ For each extracted item, assign a score:
 | ⚠️ Maybe | Useful in context but generic or already known — capture only if novel to you |
 | ❌ Skip | Noise, filler, already well-known, or too vague to be useful |
 
-Show the scored list. Be ruthless — most items from a good video should score ✅ or ⚠️, but intro/outro fluff, obvious statements, and pure context should be ❌.
+The reason must be specific — not "good insight" but *why* it's worth keeping or cutting.
+
+Example scored list with overlap:
+```
+1. ✅ Capture — novel framing I haven't seen; directly applicable to current architecture
+
+2. ~ Overlap detected (91%) — "Confidence-based model routing"
+   Summary: Use a confidence threshold to decide whether to escalate from a cheap to an expensive model.
+   Recommendation: downgrade to ❌ — already well-captured; no new angle here.
+   ❌ Skip — already in brain with same framing; nothing new added
+
+3. ❌ Skip — intro context, no standalone value
+
+4. ✅ Capture — concrete technique with a named pattern, easy to act on
+
+5. ⚠️ Maybe — solid principle but vague without surrounding context
+```
 
 After scoring, show a summary: `X items to capture, Y maybes, Z skipped.`
 
-Ask the user: **"Capture all ✅ items now? Or review the list first?"**
+---
+
+## Phase 2.5 — Draft (Always Runs)
+
+Before any captures, draft the full text for every ✅ item (and any ⚠️ items the user confirms). Show all drafts as a numbered list so the user can review wording, request trims, or cut items before anything hits the brain.
+
+For each draft:
+- Write it as a complete, self-contained sentence or short paragraph — not a fragment
+- Include enough context that it makes sense without the source video
+- Always append `Source: <Channel> - <Video Title> <url>` at the end of the text when a URL was provided — the human-readable label enables grouping by source, the URL gets extracted into the `urls[]` database field
+- Keep it tight — trim filler, hedging, and re-stated context from the source
+
+Example:
+```
+Draft 1: "Agentic system design principle: separate memory (Postgres/pgvector), compute
+(Edge Functions/LLM calls), and interface (MCP/Discord/CLI) into distinct layers. Each
+layer should be independently replaceable. Source: Nate B Jones - Why Agents Fail https://youtu.be/FtCdYhspm7w"
+
+Draft 2: ...
+```
+
+After showing all drafts, ask: **"Capture these now, or any changes first?"**
+
+If `--commit` was NOT specified (the default), stop here and wait for the user to confirm or request edits before proceeding to Phase 3.
 
 ---
 
 ## Phase 3 — Synthesize (Capture to Second Brain)
 
-If `--dry-run` was specified, skip all `capture_thought` calls and instead print each thought as it would be captured — formatted exactly as it would appear in the brain — then print the final summary with `[DRY RUN — nothing captured]`. This lets the user review and tune before committing.
+For each approved draft, call `capture_thought`:
 
-For each ✅ item (and any ⚠️ items the user confirms), call `capture_thought` with a well-formed thought:
+- Set `is_external: true` whenever a URL was provided as input. Leave it unset (defaults false) for raw text with no URL.
 
-- Write it as a complete, self-contained sentence or short paragraph — not a fragment
-- Include enough context that it makes sense without the source video
-- Add the source URL if one was provided
-- Tag with relevant topics so it surfaces in future searches
-
-Example capture for item 1 above:
-> "Agentic system design principle: separate memory (Postgres/pgvector), compute (Edge Functions/LLM calls), and interface (MCP/Discord/CLI) into distinct layers. Each layer should be independently replaceable. Source: https://youtu.be/FtCdYhspm7w"
-
-Capture each item one at a time using the `capture_thought` MCP tool. Show the confirmation receipt for each (`✓ Captured: title [category]`).
+Show the confirmation receipt for each (`✓ Captured: title [category]`).
 
 After all captures are done, print a final summary:
 ```
@@ -101,7 +144,7 @@ Panning complete.
 
 ## Future Enhancements
 
-- **Conflict detection (Phase 2.5)** — Before capturing each ✅ item, run `semantic_search` to find existing thoughts with >80% similarity. Surface conflicts side-by-side and ask: confirm conflict (capture with `contradicts` tag + old ID), update existing thought, or skip. Adds 1 MCP call per item but prevents silent contradictions accumulating in the brain.
+- **Update existing from overlap** — When Phase 2 overlap is detected, offer an "update existing thought" action instead of just skip/downgrade. Deferred until overlap detection workflow is proven in practice.
 
 ## Rules
 

@@ -340,7 +340,7 @@ async function meetingPrep(args: {
 async function getThought(args: { id: string }): Promise<string> {
   const { data, error } = await supabase
     .from("thoughts")
-    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, created_at, updated_at")
+    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, is_external, created_at, updated_at")
     .eq("id", args.id)
     .single();
   if (error) throw new Error(`Lookup failed: ${error.message}`);
@@ -349,7 +349,7 @@ async function getThought(args: { id: string }): Promise<string> {
   const lines = [
     `**${data.title}** [${data.category}]`,
     `Status: ${data.status} · Confidence: ${(data.confidence * 100).toFixed(0)}%`,
-    `Source: ${data.source} · Captured: ${new Date(data.created_at).toLocaleDateString()}`,
+    `Source: ${data.source} · Captured: ${new Date(data.created_at).toLocaleDateString()}${data.is_external ? " · External" : ""}`,
     "",
     `**Summary:** ${data.summary}`,
     data.people?.length ? `**People:** ${data.people.join(", ")}` : "",

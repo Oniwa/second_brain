@@ -6,11 +6,12 @@
 Add `is_external BOOLEAN DEFAULT false` to thoughts schema so the wiki compiler can label YouTube-sourced insights with `[Source: ...]` correctly.
 
 Steps (in order):
-1. `supabase/migrations/005_is_external.sql` — add column + backfill (`is_external = true` where `raw_text ILIKE '%Source:%'`)
-2. `supabase/functions/process-thought/index.ts` — accept and store `is_external` from capture payload
-3. `mcp/src/server.ts` — pass `is_external` flag through `capture_thought`
-4. Pan skill — pass `is_external=true` on every capture + include YouTube URL in raw text
-5. Recompile affected wiki pages
+1. ✓ `supabase/migrations/006_is_external.sql` — add column + backfill (`is_external = true` where `raw_text ILIKE '%Source:%'`)
+2. ✓ `supabase/functions/process-thought/index.ts` — accept and store `is_external` from capture payload
+3. ✓ `mcp/src/server.ts` — pass `is_external` flag through `capture_thought`, surface in `get_thought`
+4. ✓ Pan skill — `is_external: true` when URL provided, `Source: <url>` appended, always dry-run, reasons required, Phase 2.5 draft trims
+   4a. Pan skill overlap detection — spec complete, not yet implemented (see `wiki_implementation.md` → Overlap Detection Spec)
+5. Recompile affected wiki pages (blocked on 4a optional — can ship without it)
 
 Backfill rule locked in: `6fcc453`
 Spec: `plans/wiki_implementation.md` → Follow-up 1 — Source Labels
@@ -27,6 +28,7 @@ Spec: `plans/wiki_implementation.md` → Follow-up 1 — Source Labels
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-05-05 | Wiki item 2 (steps 1-3) | `is_external` column + backfill, Edge Function accepts flag, MCP `capture_thought` passes it, `get_thought` surfaces it |
 | 2026-05-05 | Dashboard 8-10 | Edge Function update mode (`id` param), MCP `updateThought` re-routes through Edge Function, Discord `!update` command |
 | 2026-05-04 | Wiki MVP | `compile_wiki.py`, `wiki_pages` table, MCP `get_wiki_page` + `list_wiki_pages`, pre-cron hardening |
 | 2026-05-04 | Dashboard Phase 1 | `audit.html` — action item triage, archive with reason, collapsible raw text, shared CSS |
