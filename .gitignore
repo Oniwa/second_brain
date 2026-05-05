@@ -9,3 +9,5 @@ mcp/node_modules/
 mcp/dist/
 credentials.json
 token.json
+compiled-wiki/
+dashboard/config.js

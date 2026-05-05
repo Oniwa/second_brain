@@ -97,19 +97,19 @@ def recent(env: dict, days: int = 7, category: str | None = None) -> None:
 
 
 def search(env: dict, query: str, limit: int = 10, category: str | None = None) -> None:
-    # Generate embedding
-    embed_url = "https://api.openai.com/v1/embeddings"
+    # Generate embedding via Edge Function (avoids direct OpenAI calls blocked by firewalls)
+    embed_url = f"{env['SUPABASE_URL']}/functions/v1/generate-embedding"
     embed_headers = {
-        "Authorization": f"Bearer {env['OPENAI_API_KEY']}",
+        "Authorization": f"Bearer {env['SUPABASE_SERVICE_ROLE_KEY']}",
         "Content-Type": "application/json",
     }
     embed_result = api_request(
         embed_url,
         method="POST",
-        body={"model": "text-embedding-3-small", "input": query},
+        body={"text": query},
         headers=embed_headers,
     )
-    embedding = embed_result["data"][0]["embedding"]
+    embedding = embed_result["embedding"]
 
     # Call semantic_search RPC
     url = f"{env['SUPABASE_URL']}/rest/v1/rpc/semantic_search"

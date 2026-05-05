@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
@@ -15,9 +16,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !OPENAI_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing required environment variables. Check your .env file.");
   process.exit(1);
 }
@@ -26,18 +26,26 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
 async function generateEmbedding(text: string): Promise<number[]> {
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: "text-embedding-3-small", input: text }),
+    body: JSON.stringify({ text }),
   });
   if (!res.ok) throw new Error(`Embedding failed: ${await res.text()}`);
   const data = await res.json();
-  return data.data[0].embedding;
+  return data.embedding;
 }
 
 function formatThought(t: Record<string, unknown>): string {
@@ -125,6 +133,9 @@ async function captureThought(args: {
     body: JSON.stringify({ text: args.text, source: args.source ?? "mcp" }),
   });
   const data = await res.json();
+  if (data.duplicate) {
+    return `⚠️ Duplicate: already captured as **${data.title}** [${data.category}]\nID: ${data.id}`;
+  }
   if (!res.ok || !data.ok)
     throw new Error(data.error ?? "Capture failed");
   return [
@@ -176,11 +187,17 @@ async function getStats(args: { days?: number }): Promise<string> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
+  const needsReviewCount = statusCounts["needs_review"] ?? 0;
+  const reviewAlert = needsReviewCount > 0
+    ? [`⚠ ${needsReviewCount} thought(s) need review — use get_needs_review to see them`, ""]
+    : [];
+
   const lines = [
     "**Brain overview (all time)**",
     `Total thoughts: ${totalAllTime}`,
     ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
     "",
+    ...reviewAlert,
     `**Trends — last ${args.days ?? 30} days**`,
     `Captures this period: ${data.length}`,
     "",
@@ -207,13 +224,33 @@ async function updateThought(args: {
   const { id, ...fields } = args;
   const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
   if (Object.keys(updates).length === 0) return "No fields provided to update.";
+
+  if (updates.raw_text !== undefined) {
+    const hash = hashText(normalizeText(updates.raw_text as string));
+    const { data: existing } = await supabase
+      .from("thoughts")
+      .select("id, title, category")
+      .eq("content_hash", hash)
+      .neq("id", id)
+      .maybeSingle();
+    if (existing) {
+      return `⚠️ Duplicate: that content already exists as **${existing.title}** [${existing.category}]\nID: ${existing.id}`;
+    }
+    updates.content_hash = hash;
+  }
+
   const { data, error } = await supabase
     .from("thoughts")
     .update(updates)
     .eq("id", id)
     .select("title")
     .single();
-  if (error) throw new Error(`Update failed: ${error.message}`);
+  if (error) {
+    if ((error as { code?: string }).code === "23505") {
+      return "⚠️ Duplicate: that content already exists in your brain (concurrent capture).";
+    }
+    throw new Error(`Update failed: ${error.message}`);
+  }
   if (!data) return `No thought found with ID ${id}.`;
   return `Updated: ${data.title}`;
 }
@@ -319,6 +356,66 @@ async function getThought(args: { id: string }): Promise<string> {
   return lines.filter((l) => l !== undefined && l !== null).join("\n");
 }
 
+async function getNeedsReview(args: { category?: string }): Promise<string> {
+  let query = supabase
+    .from("thoughts")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, confidence, created_at")
+    .eq("status", "needs_review")
+    .order("created_at", { ascending: false });
+
+  if (args.category) query = query.eq("category", args.category);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Needs-review fetch failed: ${error.message}`);
+  if (!data || data.length === 0) return "No thoughts need review.";
+
+  return `**${data.length} thought(s) need review**\n\n` +
+    data.map((t: Record<string, unknown>) => {
+      const conf = typeof t.confidence === "number"
+        ? ` · Confidence: ${(t.confidence * 100).toFixed(0)}%`
+        : "";
+      return formatThought(t).replace(
+        `ID: ${t.id}`,
+        `Confidence: ${typeof t.confidence === "number" ? (t.confidence * 100).toFixed(0) : "?"}% · ID: ${t.id}`
+      ) + conf;
+    }).join("\n\n---\n\n");
+}
+
+async function getWikiPage(args: { slug: string }): Promise<string> {
+  const { data, error } = await supabase
+    .from("wiki_pages")
+    .select("slug, title, content, entity_type, thought_count, stale, last_compiled_at")
+    .eq("slug", args.slug)
+    .single();
+  if (error) throw new Error(`Wiki page lookup failed: ${error.message}`);
+  if (!data) return `No wiki page found with slug "${args.slug}". Run: python scripts/compile_wiki.py --dry-run to see available pages.`;
+  const staleWarning = data.stale
+    ? `\n⚠️ This page is stale — thought count has changed since last compile.\nRun: python scripts/compile_wiki.py --${data.entity_type} "${data.title}"\n\n`
+    : "";
+  return `${staleWarning}${data.content}`;
+}
+
+async function listWikiPages(args: { entity_type?: string }): Promise<string> {
+  let query = supabase
+    .from("wiki_pages")
+    .select("slug, title, entity_type, thought_count, stale, last_compiled_at")
+    .order("entity_type", { ascending: true })
+    .order("thought_count", { ascending: false });
+  if (args.entity_type) query = query.eq("entity_type", args.entity_type);
+  const { data, error } = await query;
+  if (error) throw new Error(`Wiki list failed: ${error.message}`);
+  if (!data || data.length === 0)
+    return "No wiki pages compiled yet. Run: python scripts/compile_wiki.py --all";
+  const header = `**${data.length} wiki page(s)**\n\n${"Slug".padEnd(45)} ${"Type".padEnd(8)} ${"Thoughts".padStart(8)}  Compiled`;
+  const divider = "─".repeat(75);
+  const rows = data.map((p) => {
+    const stale = p.stale ? " ⚠️" : "";
+    const compiled = (p.last_compiled_at as string).slice(0, 10);
+    return `${p.slug.padEnd(45)} ${(p.entity_type as string).padEnd(8)} ${String(p.thought_count).padStart(8)}  ${compiled}${stale}`;
+  });
+  return [header, divider, ...rows].join("\n");
+}
+
 async function getContext(args: { topic: string }): Promise<string> {
   // Combine semantic search + keyword match on topics array
   const [embedding, keywordResult] = await Promise.all([
@@ -358,7 +455,7 @@ async function getContext(args: { topic: string }): Promise<string> {
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.3.0" },
+  { name: "second-brain", version: "1.5.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -492,6 +589,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "get_needs_review",
+      description: "Fetch all thoughts that need review — low-confidence captures flagged for correction. Always use this tool when the user asks about thoughts needing review, instead of semantic_search or list_recent.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: ["person", "project", "idea", "admin", "insight"],
+            description: "Filter by category (optional)",
+          },
+        },
+      },
+    },
+    {
+      name: "get_wiki_page",
+      description: "Fetch a compiled wiki page by slug. Returns full markdown with YAML front-matter. Use list_wiki_pages first to discover available slugs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slug: { type: "string", description: "Page slug (e.g. 'topic-ai-agents', 'person-tammy')" },
+        },
+        required: ["slug"],
+      },
+    },
+    {
+      name: "list_wiki_pages",
+      description: "List all compiled wiki pages with metadata — slug, type, thought count, compile date, stale flag.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: {
+            type: "string",
+            enum: ["topic", "person", "project", "auto"],
+            description: "Filter by page type (optional)",
+          },
+        },
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -543,6 +679,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_context":
         text = await getContext(a as Parameters<typeof getContext>[0]);
+        break;
+      case "get_needs_review":
+        text = await getNeedsReview(a as Parameters<typeof getNeedsReview>[0]);
+        break;
+      case "get_wiki_page":
+        text = await getWikiPage(a as Parameters<typeof getWikiPage>[0]);
+        break;
+      case "list_wiki_pages":
+        text = await listWikiPages(a as Parameters<typeof listWikiPages>[0]);
         break;
       case "meeting_prep":
         text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);

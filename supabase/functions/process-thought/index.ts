@@ -16,6 +16,15 @@ function extractUrls(text: string): string[] {
   return [...text.matchAll(URL_REGEX)].map(m => m[0]);
 }
 
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+async function hashText(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 interface ClassificationResult {
   category: "person" | "project" | "idea" | "admin" | "insight";
   title: string;
@@ -151,10 +160,27 @@ serve(async (req) => {
   }
 
   try {
+    const trimmed = text.trim();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Duplicate check before any LLM calls
+    const contentHash = await hashText(normalizeText(trimmed));
+    const { data: existing } = await supabase
+      .from("thoughts")
+      .select("id, title, category")
+      .eq("content_hash", contentHash)
+      .maybeSingle();
+    if (existing) {
+      return new Response(
+        JSON.stringify({ ok: false, duplicate: true, id: existing.id, title: existing.title, category: existing.category }),
+        { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
     // Run embedding and Haiku classification in parallel
     const [embedding, haikusResult] = await Promise.all([
-      generateEmbedding(text.trim()),
-      classify(text.trim(), HAIKU_MODEL),
+      generateEmbedding(trimmed),
+      classify(trimmed, HAIKU_MODEL),
     ]);
 
     let classification = haikusResult;
@@ -165,7 +191,7 @@ serve(async (req) => {
       console.log(
         `Low confidence (${classification.confidence}) — escalating to Sonnet`,
       );
-      classification = await classify(text.trim(), SONNET_MODEL);
+      classification = await classify(trimmed, SONNET_MODEL);
       model_used = SONNET_MODEL;
     }
 
@@ -174,14 +200,12 @@ serve(async (req) => {
       ? "active"
       : "needs_review";
 
-    const urls = extractUrls(text.trim());
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const urls = extractUrls(trimmed);
 
     const { data, error } = await supabase
       .from("thoughts")
       .insert({
-        raw_text: text.trim(),
+        raw_text: trimmed,
         embedding,
         category: classification.category,
         title: classification.title,
@@ -193,6 +217,7 @@ serve(async (req) => {
         confidence: classification.confidence,
         source,
         status,
+        content_hash: contentHash,
       })
       .select("id, title, category, confidence, status")
       .single();
