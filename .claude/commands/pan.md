@@ -10,13 +10,33 @@ The user provides one of:
 
 Optionally, the user may add `--commit` to skip the dry-run review and capture immediately.
 
-## Step 0 — Fetch Transcript (YouTube URLs only)
+## Step 0 — Fetch Transcript & Duplicate Pre-check
+
+### Step 0a — Fetch Transcript (YouTube URLs only)
 
 If the input is a YouTube URL, invoke the `/transcript` skill with the URL. The transcript skill handles all machine-specific path resolution.
 
 Read the output file it produces as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
 
 If the transcript fetch fails (video unavailable, transcripts disabled, IP blocked), stop and tell the user.
+
+### Step 0b — Duplicate Pre-check (all inputs)
+
+Before Phase 1, check whether this source has already been panned:
+
+**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If any results reference that URL, warn the user:
+```
+⚠️ This source may already be in your brain — found N thoughts from this URL:
+  - "Thought title one"
+  - "Thought title two"
+  ...
+Continue panning anyway, or stop here?
+```
+Stop and wait for confirmation before proceeding to Phase 1.
+
+**If raw text was provided (no URL):** Use the source label the user provides (e.g. "Q1 planning meeting", "Smith et al 2024") as the search query. If 3 or more results reference that same source label, show the same warning above.
+
+If no matches are found, proceed silently to Phase 1.
 
 ---
 
@@ -54,15 +74,23 @@ Do not skip lines because they seem obvious or repetitive. The discipline is to 
 
 For each extracted item:
 
-**Step 1 — Overlap check:** Call `semantic_search` with the item text (limit 2). If any result has similarity ≥ 85%, show a match block directly below the item:
+**Step 1 — Overlap check:** Call `semantic_search` with the item text (limit 2). Show match blocks based on similarity band:
 
+**Hard flag (≥ 85%)** — likely duplicate:
 ```
   ~ Overlap detected (92%) — "Layered agentic architecture"
     Summary: Separate memory, compute, and interface into distinct layers for independent replaceability.
     Recommendation: downgrade to ⚠️ — brain already has this principle; only keep if this source adds new nuance.
 ```
 
-If no matches are above 85%, say nothing.
+**Soft warning (65–84%)** — possible overlap, review before capturing:
+```
+  ~ Possible overlap (74%) — "Trust requires visibility into system errors"
+    Summary: Systems are abandoned not for imperfection but for loss of trust from mysterious errors.
+    Recommendation: review — similar concept exists; only capture if this source adds meaningfully new framing.
+```
+
+If no matches are at or above 65%, say nothing.
 
 **Step 2 — Score with reason:** Assign a score **and a one-line reason**, taking any overlap into account:
 
