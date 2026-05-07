@@ -9,9 +9,8 @@ Steps (in order):
 1. ✓ `supabase/migrations/006_is_external.sql` — add column + backfill (`is_external = true` where `raw_text ILIKE '%Source:%'`)
 2. ✓ `supabase/functions/process-thought/index.ts` — accept and store `is_external` from capture payload
 3. ✓ `mcp/src/server.ts` — pass `is_external` flag through `capture_thought`, surface in `get_thought`
-4. ✓ Pan skill — `is_external: true` when URL provided, `Source: <url>` appended, always dry-run, reasons required, Phase 2.5 draft trims
-   4a. Pan skill overlap detection — spec complete, not yet implemented (see `wiki_implementation.md` → Overlap Detection Spec)
-5. Recompile affected wiki pages (blocked on 4a optional — can ship without it)
+4. ✓ Pan skill — `is_external: true` when URL provided, `Source: Channel - Title <url>`, always dry-run, reasons required, Phase 2.5 draft trims, overlap detection in Phase 2 (85% threshold, top 2 results)
+5. Recompile affected wiki pages
 
 Backfill rule locked in: `6fcc453`
 Spec: `plans/wiki_implementation.md` → Follow-up 1 — Source Labels

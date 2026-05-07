@@ -313,7 +313,7 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 - ✓ Reason required for every Phase 2 score (specific why, not just badge)
 - ✓ Phase 2.5 Draft — first-pass trim of capture text before committing
 - ✓ `is_external: true` when URL provided; `Source: <url>` appended to raw text
-- Overlap detection via `semantic_search` in Phase 2 — see spec below
+- ✓ Overlap detection via `semantic_search` in Phase 2 — see spec below
 - ✓ URL in captures: unblocked by `is_external` migration
 
 ### Pan Skill — Overlap Detection Spec
