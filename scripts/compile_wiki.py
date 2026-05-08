@@ -12,6 +12,7 @@ Usage:
   python scripts/compile_wiki.py --min-thoughts 3 --topic "SHA-256"
   python scripts/compile_wiki.py --strict
   python scripts/compile_wiki.py --skip-existing
+  python scripts/compile_wiki.py --skip-unchanged
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
   python scripts/compile_wiki.py --skip-projects
@@ -734,6 +735,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     compiled = 0
     errors = 0
     skipped_existing = 0
+    skipped_unchanged = 0
     error_details: list[str] = []
 
     discord_token = env.get("DISCORD_BOT_TOKEN")
@@ -757,6 +759,9 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
+        if args.skip_unchanged and slug in existing and existing[slug]["thought_count"] == count:
+            skipped_unchanged += 1
+            continue
         try:
             variants = topic_reverse.get(topic, [topic])
             compile_single_topic(env, topic, variants, dry_run=False)
@@ -776,6 +781,9 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
+        if args.skip_unchanged and slug in existing and existing[slug]["thought_count"] == count:
+            skipped_unchanged += 1
+            continue
         try:
             variants = people_reverse.get(person, [person])
             compile_single_person(env, person, variants, dry_run=False)
@@ -794,6 +802,9 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         slug = slugify(project, "project")
         if args.skip_existing and slug in existing:
             skipped_existing += 1
+            continue
+        if args.skip_unchanged and slug in existing and existing[slug]["thought_count"] == count:
+            skipped_unchanged += 1
             continue
         try:
             anchor_topics = project_defs[project]
@@ -815,6 +826,8 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     print(f"\nCompiled: {compiled} page(s) ({n_topics} topics, {n_people} people, {n_projects} projects)")
     if skipped_existing:
         print(f"Skipped:  {skipped_existing} already-compiled page(s) (--skip-existing)")
+    if skipped_unchanged:
+        print(f"Skipped:  {skipped_unchanged} unchanged page(s) (--skip-unchanged)")
     if topics_below:
         print(f"Skipped:  {len(topics_below)} topic(s) below threshold of {min_topic} (use --dry-run to see list)")
     if errors:
@@ -848,6 +861,8 @@ def main() -> None:
     parser.add_argument("--skip-projects", action="store_true", help="Skip project page compilation")
     parser.add_argument("--skip-existing", action="store_true",
                         help="Skip pages that already exist in wiki_pages (resume interrupted run)")
+    parser.add_argument("--skip-unchanged", action="store_true",
+                        help="Skip pages whose thought_count hasn't changed since last compile (for cron)")
 
     args = parser.parse_args()
 
