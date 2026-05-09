@@ -27,6 +27,9 @@ Spec: `plans/wiki_implementation.md` → Follow-up 1 — Source Labels
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-05-09 | Wiki portability | Private git repo initialised inside `compiled-wiki/` — push/pull to sync wiki across machines |
+| 2026-05-09 | Full wiki recompile | All 130+ pages regenerated with `is_external` source labels, footnote citations, URLs, project pages |
+| 2026-05-09 | compile_wiki.py hardening | 300s timeout, 429 TPM retry with 65s backoff (3 attempts), `--skip-unchanged` for cron |
 | 2026-05-05 | Wiki item 2 (steps 1-3) | `is_external` column + backfill, Edge Function accepts flag, MCP `capture_thought` passes it, `get_thought` surfaces it |
 | 2026-05-05 | Dashboard 8-10 | Edge Function update mode (`id` param), MCP `updateThought` re-routes through Edge Function, Discord `!update` command |
 | 2026-05-04 | Wiki MVP | `compile_wiki.py`, `wiki_pages` table, MCP `get_wiki_page` + `list_wiki_pages`, pre-cron hardening |
