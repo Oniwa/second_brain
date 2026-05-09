@@ -276,31 +276,38 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 
 ## Confirmed Implementation Roadmap
 
-### Wiki MVP (Phase 1 — this session)
-1. `supabase/migrations/004_wiki_graph.sql` — `wiki_pages` table only (thought_edges deferred)
-2. `scripts/compile_wiki.py` — topic + person pages
-3. `mcp/src/server.ts` — add `get_wiki_page` + `list_wiki_pages`
-4. `.gitignore` — add `compiled-wiki/`
+### Wiki MVP (Phase 1 — complete ✅)
+1. ✅ `supabase/migrations/004_wiki_graph.sql` — `wiki_pages` table only (thought_edges deferred)
+2. ✅ `scripts/compile_wiki.py` — topic + person pages
+3. ✅ `mcp/src/server.ts` — add `get_wiki_page` + `list_wiki_pages`
+4. ✅ `.gitignore` — add `compiled-wiki/`
 
-### Follow-up 1 — Source Labels
-5. `supabase/migrations/005_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill. Backfill rule: `is_external = true` where `raw_text` contains `'Source:'` (catches pan-captured thoughts reliably; may miss earliest pan sessions — good enough).
-6. Edge Function — accept and store `is_external` flag from capture payload
-7. MCP `capture_thought` — pass `is_external` flag
-8. **Pan skill** — after `is_external` migration: include YouTube URL in raw text (so Edge Function extracts it into `urls[]`) and pass `is_external=true` on every capture. Note: existing pan-captured thoughts have `Source: channel | title` in raw text but no URL in `urls[]` — backfill is imprecise, forward captures will be clean.
-9. Recompile — wiki pages regenerated with `[Source: ...]` labels
+### Follow-up 1 — Source Labels (complete ✅)
+5. ✅ `supabase/migrations/006_is_external.sql` — `is_external BOOLEAN DEFAULT false` + backfill
+6. ✅ Edge Function — accept and store `is_external` flag from capture payload
+7. ✅ MCP `capture_thought` — pass `is_external` flag; `get_thought` surfaces it
+8. ✅ **Pan skill** — `is_external: true` when URL provided; `Source: channel | title <url>` in raw text
+9. ✅ Recompile — all pages regenerated with `[Source: ...]` footnote citations and URLs
 
-### Pre-Cron Hardening (required before scheduling)
-8. Timestamps on run start/end in `compile_wiki.py` output
-9. Exit code 1 when `errors > 0` (add `--strict` flag; default keeps `--best-effort` behavior)
-10. Detect credit exhaustion / rate limit specifically — abort early with clear message rather than burning through N doomed API calls
-11. Discord notification on cron completion — summary line (compiled/skipped/errors) posted as DM via existing bot infrastructure
-12. Log rotation strategy — crontab redirects stdout+stderr to dated log file; keep last 30 days
+### Pre-Cron Hardening (mostly complete ✅)
+8. ✅ Timestamps on run start/end in `compile_wiki.py` output
+9. ✅ Exit code 1 when `errors > 0` (add `--strict` flag; default keeps `--best-effort` behavior)
+10. ✅ Detect credit exhaustion / systemic errors — abort early (`_SYSTEMIC_CODES = {401, 403, 529}`); 429 retries with 65s backoff (3 attempts)
+11. ⚠️ Discord DM notification on cron completion — bot returns 403 Forbidden; needs investigation
+12. ✅ Log rotation strategy — crontab redirects stdout+stderr to dated log file; `--skip-unchanged` for cron efficiency
 
-### Project Pages — Design First
-13. **Spec**: Sample project-category thoughts to determine how projects are identified (topics[]? new project_name field? title prefix?)
-14. **Decision**: Pick grouping mechanism — likely requires `project_name TEXT` migration + backfill + Edge Function update
-15. **Implement**: Add `--project` and `--skip-projects` flags to `compile_wiki.py`, project system prompt, slug `project-{name}`
-16. Open question: stale detection for projects (project thoughts change status/scope frequently — `created_at` should be displayed prominently per plan)
+### Project Pages (partial ✅ — 0-thought issue outstanding)
+13. ✅ **Spec**: Decided on `project_definitions.json` — maps project names to anchor topic keywords; no new schema field needed
+14. ✅ **Implement**: `--project` flag + project system prompt + slug `project-{name}` in `compile_wiki.py`
+15. ⚠️ **Board Game Inventory / Meal Planner**: compiled with 0 thoughts — anchor keywords in `project_definitions.json` don't match actual `topics[]` tags; need to query those thoughts and fix anchors
+16. ✅ **Second Brain** (20 thoughts) and **ABUCW** (4 thoughts) pages compiled correctly
+
+### Wiki Portability (complete ✅)
+- ✅ Private nested git repo inside `compiled-wiki/` — push/pull to sync across machines
+- ✅ Decision: nested repo (not submodule) — avoids exposing private repo URL in public `.gitmodules`
+
+### Full Recompile (complete ✅ — 2026-05-09)
+- ✅ 130+ pages compiled (126 topics, 24 people, 4 projects) with footnote citations, source labels, URLs
 
 ### Phase 2 — Graph Layer
 13. `supabase/migrations/006_thought_edges.sql` — `thought_edges` table
@@ -527,44 +534,49 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 
 ## Follow-Up Items (Prioritized)
 
-**Before scheduling cron (BLOCKER):**
-1. **Pre-cron hardening** — timestamps, exit code on errors, credit-exhaustion abort, Discord DM notification, log rotation. Do this before adding the Pi cron or cost blowouts will go undetected.
+**Immediate (unblocked):**
+1. ⚠️ **Fix `project_definitions.json`** — Board Game Inventory and Meal Planner anchor keywords don't match actual `topics[]` tags; those project pages have 0 thoughts. Query actual tags and fix.
+2. ⚠️ **Fix Discord DM 403** — bot returns Forbidden on completion DM; last remaining pre-cron hardening item. Investigate bot DM channel permissions.
 
-**Next after this (HIGH — multi-client access):**
-2. **Remote HTTP MCP server** — Hono + StreamableHTTP; enables Claude.ai in browser, GitHub Copilot CLI, Claude Desktop
+**Before scheduling cron (BLOCKER):**
+3. **Decide cron location** — Pi locks wiki to home network; PC requires machine to be on; on-demand is safest but loses automation. Decision needed before scheduling.
+
+**Next (HIGH — multi-client access):**
+4. **Remote HTTP MCP server** — Hono + StreamableHTTP; enables Claude.ai in browser, GitHub Copilot CLI, Claude Desktop
 
 **Close follow-up:**
-3. **Project pages — design first** — 115 project-category thoughts have no dedicated project_name field; need to spec grouping mechanism before implementing. Sample thoughts to decide: topics[] reuse vs. new schema field vs. title prefix. New field is likely correct but requires migration + backfill + Edge Function update.
-4. **Task Audit tab in `dashboard/index.html`** — add tab showing active thoughts with non-empty action_items[], oldest first. Per-row archive button + optional reason field. Reason appended to raw_text as `[Archived: reason]`. Calls Supabase REST API directly with service role key (local-only dashboard, no Edge Function needed). Fixes digest resurfacing completed tasks.
-5. **Discord `!update {id} {text}`** — fix raw_text from mobile (biggest current operational pain)
+5. **Dashboard item 11** — inline `raw_text` edit in `audit.html` (backend live, UI only)
 6. **Discord `!wiki {topic}`** — fetch compiled wiki page from Discord
 
 **Phase 2:**
-5. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
+7. **Typed edge classifier** — populate `thought_edges`; AI agents topic has 90 captures = highest contradiction probability
    - Two-stage hybrid: Haiku filters candidate pairs (first 400 chars each, cheap), Opus classifies passing pairs (full context, expensive)
    - Candidate sampling: find thought pairs sharing ≥ 2 topics (GIN overlap query), ranked by overlap count
    - Output includes `direction` (A_to_B | B_to_A | symmetric), `confidence`, `valid_from`, `valid_until`
    - Hard cost cap (`--max-cost-usd`, default $5); maintain pricing table; abort if model pricing unknown
    - Insert via `thought_edges_upsert` RPC (atomic, deduplicates, bumps `support_count` on repeat)
-5. **Debate pages** — auto-generated at ≥ 3 contradicts edges
+8. **Debate pages** — auto-generated at ≥ 3 contradicts edges
 
 **Later:**
-6. **Wiki portability — private git repo** — **Decision: separate private GitHub repo for `compiled-wiki/` only.** Recompile-on-demand ruled out (cost — wiki already 10x normal running costs, want to avoid redundant recompiles). Cloud sync ruled out (not all machines have access to same cloud systems). Implementation: create private `second-brain-wiki` repo, init compiled-wiki/ as a nested git repo pointing to it, add optional `--push` flag to `compile_wiki.py` that commits + pushes after a successful compile run. New machine setup: clone private repo into compiled-wiki/. Person pages contain sensitive relationship content — private repo is required, not optional.
-7. **Stale detection cron** — set `stale=true` when thought_count changes
-8. **Update `open_brain_improvements.md`** — reflect elevated priority of remote HTTP MCP server
+9. **Stale detection cron** — set `stale=true` when thought_count changes; currently handled by `--skip-unchanged` count comparison at compile time
+10. **Update `open_brain_improvements.md`** — reflect elevated priority of remote HTTP MCP server
 
 ---
 
 ## Order of Operations
 
-1. Apply `004_wiki_graph.sql` via Supabase MCP plugin ✅
-2. Dry-run: `python scripts/compile_wiki.py --dry-run` to preview topic/person counts ✅
-3. Test single: `python scripts/compile_wiki.py --topic "AI agents"` ✅
-4. Verify MCP: rebuild + restart Claude Code, call `list_wiki_pages` ✅
-5. Run `--all` for full compilation ✅ (116 pages — 36 from initial run + 80 resumed with --skip-existing)
-6. Add `compiled-wiki/` to `.gitignore` ✅
-7. **Pre-cron hardening** ✅ (timestamps, exit codes, systemic error abort, Discord DM notification; log rotation deferred to crontab config)
-8. Add weekly cron — ⏳ location TBD (Pi locks wiki to home network; need to decide where compiled-wiki/ should live before scheduling)
+1. ✅ Apply `004_wiki_graph.sql` via Supabase MCP plugin
+2. ✅ Dry-run: `python scripts/compile_wiki.py --dry-run` to preview topic/person counts
+3. ✅ Test single: `python scripts/compile_wiki.py --topic "AI agents"`
+4. ✅ Verify MCP: rebuild + restart Claude Code, call `list_wiki_pages`
+5. ✅ Run `--all` for full compilation (130+ pages — topics, people, projects)
+6. ✅ Add `compiled-wiki/` to `.gitignore`
+7. ✅ Pre-cron hardening (timestamps, exit codes, systemic error abort, 429 retry, `--skip-unchanged`; Discord DM ⚠️ returns 403)
+8. ✅ Wiki portability — private nested git repo in `compiled-wiki/`
+9. ✅ Full recompile with source labels + footnote citations + URLs (2026-05-09)
+10. ⏳ Fix project_definitions.json (0-thought projects)
+11. ⏳ Fix Discord DM 403
+12. ⏳ Decide cron location → schedule weekly recompile
 
 ---
 
