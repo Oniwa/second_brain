@@ -311,12 +311,16 @@ def supabase_upsert(url: str, key: str, data: dict) -> dict:
 _SYSTEMIC_CODES = {
     401,  # invalid API key
     403,  # credit exhausted / billing issue
-    429,  # rate limit — batch won't self-recover
     529,  # Anthropic overloaded
 }
+# 429 is NOT systemic — TPM rate limits are transient, handled with backoff below.
+
+_TPM_BACKOFF_SECONDS = 65  # slightly over 60s to let the TPM window fully reset
+_TPM_MAX_RETRIES = 3
 
 
 def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> str:
+    import time
     body = json.dumps({
         "model": SONNET_MODEL,
         "max_tokens": 8192,
@@ -333,15 +337,22 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data["content"][0]["text"].strip()
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode("utf-8")
-        if e.code in _SYSTEMIC_CODES:
-            raise SystemicAPIError(f"Anthropic API error {e.code} (systemic — aborting run): {raw}") from e
-        raise RuntimeError(f"Anthropic API error {e.code}: {raw}") from e
+    for attempt in range(1, _TPM_MAX_RETRIES + 2):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["content"][0]["text"].strip()
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            if e.code in _SYSTEMIC_CODES:
+                raise SystemicAPIError(f"Anthropic API error {e.code} (systemic — aborting run): {raw}") from e
+            if e.code == 429 and attempt <= _TPM_MAX_RETRIES:
+                print(f"\n  rate limit hit — waiting {_TPM_BACKOFF_SECONDS}s (attempt {attempt}/{_TPM_MAX_RETRIES})...",
+                      end=" ", flush=True)
+                time.sleep(_TPM_BACKOFF_SECONDS)
+                continue
+            raise RuntimeError(f"Anthropic API error {e.code}: {raw}") from e
+    raise RuntimeError("Anthropic API error 429: exceeded max retries after rate limiting")
 
 
 # ── Discord ───────────────────────────────────────────────────────────────────
