@@ -15,6 +15,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SUPABASE_EDGE_FUNCTION_JWT = process.env.SUPABASE_EDGE_FUNCTION_JWT ?? SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing required environment variables. Check your .env file.");
@@ -29,7 +30,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ text }),
@@ -120,7 +121,7 @@ async function captureThought(args: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
     },
     body: JSON.stringify({ text: args.text, source: args.source ?? "mcp", is_external: args.is_external ?? false }),
   });
@@ -222,7 +223,7 @@ async function updateThought(args: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
       },
       body: JSON.stringify({ text: raw_text, id, source: "mcp" }),
     });

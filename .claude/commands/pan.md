@@ -7,6 +7,7 @@ Extract every insight worth keeping from a YouTube video or raw text, then captu
 The user provides one of:
 - A YouTube URL (e.g. `https://youtu.be/FtCdYhspm7w`)
 - Raw text (transcript, brain dump, meeting notes, article)
+- Combined input (YouTube + Substack companion): The user provides a YouTube URL and separately pastes the raw Substack article text with its URL. Both cover the same topic. Treat them as a single unified source. Extract holistically across both — the written article is usually more detailed.
 
 Optionally, the user may add `--commit` to skip the dry-run review and capture immediately.
 
@@ -24,7 +25,7 @@ If the transcript fetch fails (video unavailable, transcripts disabled, IP block
 
 Before Phase 1, check whether this source has already been panned:
 
-**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If any results reference that URL, warn the user:
+**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately. If any results reference either URL, warn the user:
 ```
 ⚠️ This source may already be in your brain — found N thoughts from this URL:
   - "Thought title one"
@@ -149,9 +150,28 @@ If `--commit` was NOT specified (the default), stop here and wait for the user t
 
 ## Phase 3 — Synthesize (Capture to Second Brain)
 
-For each approved draft, call `capture_thought`:
+For each approved draft, call `capture_thought` with:
+- `text`: The draft text (self-contained, includes `Source:` label at end with all relevant URLs)
+- `source`: `"{platform}: {Author} - {Title}"` — canonical platform; see format below
+- `is_external`: `true` (always — pan is for external content by definition)
 
-- Set `is_external: true` whenever a URL was provided as input. Leave it unset (defaults false) for raw text with no URL.
+**Source field format:** `{platform}: {Author/Channel} - {Title}`
+
+Single source examples:
+```
+youtube: Nate B. Jones - You're Wasting 40% Of Your AI Time On Something Fixable
+substack: Nate B. Jones - Codex Plugins Matter Because the Bottleneck Moved
+article: Author Name - Article Title
+podcast: Show Name - Episode Title
+```
+
+Dual source (YouTube + companion Substack):
+```
+source field: "substack: {Author} - {Title}"  ← canonical = the written article
+Both URLs appear in the capture text:
+  "... Source: Author - Title <youtube_url> <substack_url>"
+The urls[] field will contain both URLs for traceability.
+```
 
 Show the confirmation receipt for each (`✓ Captured: title [category]`).
 
