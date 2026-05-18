@@ -74,7 +74,7 @@ def load_env() -> dict:
                 env[key.strip()] = value.strip()
     for key in (
         "DISCORD_BOT_TOKEN", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY",
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        "SUPABASE_EDGE_FUNCTION_JWT", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
     ):
         if key in os.environ:
             env[key] = os.environ[key]
@@ -245,7 +245,7 @@ class SecondBrainBot(discord.Client):
 
         result = await asyncio.get_event_loop().run_in_executor(
             None, capture_thought_sync,
-            self.env["SUPABASE_URL"], self.env["SUPABASE_SERVICE_ROLE_KEY"], text,
+            self.env["SUPABASE_URL"], self.env.get("SUPABASE_EDGE_FUNCTION_JWT") or self.env["SUPABASE_SERVICE_ROLE_KEY"], text,
         )
 
         try:
@@ -295,7 +295,7 @@ class SecondBrainBot(discord.Client):
 
         result = await asyncio.get_event_loop().run_in_executor(
             None, call_process_thought_sync,
-            self.env["SUPABASE_URL"], self.env["SUPABASE_SERVICE_ROLE_KEY"], new_text, thought_id,
+            self.env["SUPABASE_URL"], self.env.get("SUPABASE_EDGE_FUNCTION_JWT") or self.env["SUPABASE_SERVICE_ROLE_KEY"], new_text, thought_id,
         )
 
         try:
