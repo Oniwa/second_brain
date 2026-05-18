@@ -166,8 +166,9 @@ def run_digest(digest_type: str, test_mode: bool = False) -> None:
         print(f"Missing env vars: {', '.join(missing)}")
         sys.exit(1)
 
+    edge_key = env.get("SUPABASE_EDGE_FUNCTION_JWT") or env["SUPABASE_SERVICE_ROLE_KEY"]
     print(f"Fetching {digest_type} digest...")
-    result = fetch_digest(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], digest_type)
+    result = fetch_digest(env["SUPABASE_URL"], edge_key, digest_type)
 
     if "error" in result:
         print(f"Error fetching digest: {result['error']}")

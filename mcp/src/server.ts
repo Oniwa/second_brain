@@ -5,7 +5,6 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createClient } from "@supabase/supabase-js";
-import { createHash } from "crypto";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
@@ -16,6 +15,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SUPABASE_EDGE_FUNCTION_JWT = process.env.SUPABASE_EDGE_FUNCTION_JWT ?? SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing required environment variables. Check your .env file.");
@@ -26,19 +26,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/\s+/g, " ");
-}
-
-function hashText(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
-}
-
 async function generateEmbedding(text: string): Promise<number[]> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-embedding`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ text }),
@@ -123,14 +115,15 @@ async function listRecent(args: {
 async function captureThought(args: {
   text: string;
   source?: string;
+  is_external?: boolean;
 }): Promise<string> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
     },
-    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp" }),
+    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp", is_external: args.is_external ?? false }),
   });
   const data = await res.json();
   if (data.duplicate) {
@@ -221,27 +214,44 @@ async function updateThought(args: {
   action_items?: string[];
   status?: string;
 }): Promise<string> {
-  const { id, ...fields } = args;
-  const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
-  if (Object.keys(updates).length === 0) return "No fields provided to update.";
+  const { id, raw_text, ...rest } = args;
+  const otherFields = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
 
-  if (updates.raw_text !== undefined) {
-    const hash = hashText(normalizeText(updates.raw_text as string));
-    const { data: existing } = await supabase
-      .from("thoughts")
-      .select("id, title, category")
-      .eq("content_hash", hash)
-      .neq("id", id)
-      .maybeSingle();
-    if (existing) {
-      return `⚠️ Duplicate: that content already exists as **${existing.title}** [${existing.category}]\nID: ${existing.id}`;
+  if (raw_text !== undefined) {
+    // Route through Edge Function for re-embed + re-classify + hash update
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
+      },
+      body: JSON.stringify({ text: raw_text, id, source: "mcp" }),
+    });
+    const data = await res.json();
+    if (data.duplicate) {
+      return `⚠️ Duplicate: that content already exists as **${data.title}** [${data.category}]\nID: ${data.id}`;
     }
-    updates.content_hash = hash;
+    if (!res.ok || !data.ok) throw new Error(data.error ?? "Update via Edge Function failed");
+
+    let result = `Updated: **${data.title}** [${data.category}] (confidence: ${(data.confidence * 100).toFixed(0)}%)`;
+
+    // Apply any additional explicit field overrides on top of re-classification
+    if (Object.keys(otherFields).length > 0) {
+      const { error } = await supabase
+        .from("thoughts")
+        .update(otherFields)
+        .eq("id", id);
+      if (error) throw new Error(`Secondary field patch failed: ${error.message}`);
+    }
+    return result;
   }
+
+  // No raw_text — direct DB update, no re-embedding
+  if (Object.keys(otherFields).length === 0) return "No fields provided to update.";
 
   const { data, error } = await supabase
     .from("thoughts")
-    .update(updates)
+    .update(otherFields)
     .eq("id", id)
     .select("title")
     .single();
@@ -331,7 +341,7 @@ async function meetingPrep(args: {
 async function getThought(args: { id: string }): Promise<string> {
   const { data, error } = await supabase
     .from("thoughts")
-    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, created_at, updated_at")
+    .select("id, raw_text, title, summary, category, people, topics, action_items, urls, source, status, confidence, is_external, created_at, updated_at")
     .eq("id", args.id)
     .single();
   if (error) throw new Error(`Lookup failed: ${error.message}`);
@@ -340,7 +350,7 @@ async function getThought(args: { id: string }): Promise<string> {
   const lines = [
     `**${data.title}** [${data.category}]`,
     `Status: ${data.status} · Confidence: ${(data.confidence * 100).toFixed(0)}%`,
-    `Source: ${data.source} · Captured: ${new Date(data.created_at).toLocaleDateString()}`,
+    `Source: ${data.source} · Captured: ${new Date(data.created_at).toLocaleDateString()}${data.is_external ? " · External" : ""}`,
     "",
     `**Summary:** ${data.summary}`,
     data.people?.length ? `**People:** ${data.people.join(", ")}` : "",
@@ -511,6 +521,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           text: { type: "string", description: "The thought to capture" },
           source: { type: "string", description: "Where this came from (default: mcp)" },
+          is_external: { type: "boolean", description: "True if this thought originates from an external source (YouTube, article, book). Default false." },
         },
         required: ["text"],
       },

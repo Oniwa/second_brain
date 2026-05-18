@@ -32,7 +32,7 @@ OB1 has two full framework dashboards: SvelteKit (`open-brain-dashboard`) and Ne
 
 ## What We're Taking From OB1
 
-### 1. Task Audit Tab (adapted from OB1 `/audit`) ← NEXT UP
+### 1. Task Audit Tab (adapted from OB1 `/audit`) ✅
 Show active thoughts with non-empty `action_items[]`, oldest first. Per-row archive button + optional reason field. Reason appended to `raw_text` as `[Archived: reason]`. Inline `raw_text` edit included (see Edit Feature below). Uses service role key — acceptable for local-only dashboard.
 
 ### 2. Wiki Pages Tab (our own implementation)
@@ -80,20 +80,24 @@ Horizontal bar chart alongside existing Top 10 Topics chart. Count of thoughts p
 
 ## Implementation Roadmap
 
-### Phase 1 — Task Audit Tab (next up)
-1. Add service role key to dashboard for write operations
-2. Tab: active thoughts with non-empty `action_items[]`, oldest first
-3. Per-row archive button + reason field (PATCH Supabase REST directly)
+### Phase 1 — Task Audit Tab
+- ✅ Separate `dashboard/audit.html` page with sidebar nav
+- ✅ Active thoughts with non-empty `action_items[]`, oldest first
+- ✅ Per-row archive button + optional reason field (appends to raw_text + rehash + status flip)
+- ✅ Collapsible raw text toggle
+- ✅ Shared `dashboard/shared.css` extracted; `dashboard/config.js` gitignored for secrets
+- ✅ RLS policies added for anon key (SELECT + UPDATE on thoughts)
+- ✅ Supabase service role key removed from source; publishable key used in browser
 
 ### Phase 2 — Edit Feature
-4. Extend `process-thought` Edge Function for update mode (optional `id` param)
-5. Update MCP `updateThought()` to route through Edge Function for raw_text changes
-6. Add Discord `!update {id} {new text}` handler in `discord/bot.py`
-7. Add inline raw_text edit to Task Audit tab rows
+- ✅ Extend `process-thought` Edge Function for update mode (optional `id` param) — deployed 2026-05-05
+- ✅ Update MCP `updateThought()` to route through Edge Function for raw_text changes
+- ✅ Add Discord `!update {id} {new text}` handler in `discord/bot.py`
+- ⏳ Add inline raw_text edit to audit.html rows
 
 ### Phase 3 — Additional Charts & Tabs
-8. Top 10 People horizontal bar chart (data already available in `fetchAll()`)
-9. Wiki Pages tab (reads `wiki_pages` table)
+- ⏳ Top 10 People horizontal bar chart (data already available in `fetchAll()` — quick win)
+- ⏳ Wiki Pages tab (reads `wiki_pages` table)
 
 ### Deferred
 - Near-duplicate management UI (depends on semantic dedup feature not yet built)

@@ -7,21 +7,37 @@ Extract every insight worth keeping from a YouTube video or raw text, then captu
 The user provides one of:
 - A YouTube URL (e.g. `https://youtu.be/FtCdYhspm7w`)
 - Raw text (transcript, brain dump, meeting notes, article)
+- Combined input (YouTube + Substack companion): The user provides a YouTube URL and separately pastes the raw Substack article text with its URL. Both cover the same topic. Treat them as a single unified source. Extract holistically across both — the written article is usually more detailed.
 
-Optionally, the user may add `--dry-run` to preview all captures without writing anything to the brain.
+Optionally, the user may add `--commit` to skip the dry-run review and capture immediately.
 
-## Step 0 — Fetch Transcript (YouTube URLs only)
+## Step 0 — Fetch Transcript & Duplicate Pre-check
 
-If the input is a YouTube URL, run the transcript tool first:
+### Step 0a — Fetch Transcript (YouTube URLs only)
 
-```bash
-cd /home/oniwa/PycharmProjects/youtube_transcript && \
-  .venv/bin/python main.py <URL> --output /tmp/pan_transcript.txt
-```
+If the input is a YouTube URL, invoke the `/transcript` skill with the URL. The transcript skill handles all machine-specific path resolution.
 
-Then read `/tmp/pan_transcript.txt` as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
+Read the output file it produces as the raw input for Phase 1. Tell the user the transcript was fetched and how many lines it contains.
 
 If the transcript fetch fails (video unavailable, transcripts disabled, IP blocked), stop and tell the user.
+
+### Step 0b — Duplicate Pre-check (all inputs)
+
+Before Phase 1, check whether this source has already been panned:
+
+**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately. If any results reference either URL, warn the user:
+```
+⚠️ This source may already be in your brain — found N thoughts from this URL:
+  - "Thought title one"
+  - "Thought title two"
+  ...
+Continue panning anyway, or stop here?
+```
+Stop and wait for confirmation before proceeding to Phase 1.
+
+**If raw text was provided (no URL):** Use the source label the user provides (e.g. "Q1 planning meeting", "Smith et al 2024") as the search query. If 3 or more results reference that same source label, show the same warning above.
+
+If no matches are found, proceed silently to Phase 1.
 
 ---
 
@@ -57,7 +73,27 @@ Do not skip lines because they seem obvious or repetitive. The discipline is to 
 
 ## Phase 2 — Evaluate
 
-For each extracted item, assign a score:
+For each extracted item:
+
+**Step 1 — Overlap check:** Call `semantic_search` with the item text (limit 2). Show match blocks based on similarity band:
+
+**Hard flag (≥ 85%)** — likely duplicate:
+```
+  ~ Overlap detected (92%) — "Layered agentic architecture"
+    Summary: Separate memory, compute, and interface into distinct layers for independent replaceability.
+    Recommendation: downgrade to ⚠️ — brain already has this principle; only keep if this source adds new nuance.
+```
+
+**Soft warning (65–84%)** — possible overlap, review before capturing:
+```
+  ~ Possible overlap (74%) — "Trust requires visibility into system errors"
+    Summary: Systems are abandoned not for imperfection but for loss of trust from mysterious errors.
+    Recommendation: review — similar concept exists; only capture if this source adds meaningfully new framing.
+```
+
+If no matches are at or above 65%, say nothing.
+
+**Step 2 — Score with reason:** Assign a score **and a one-line reason**, taking any overlap into account:
 
 | Score | Meaning |
 |-------|---------|
@@ -65,29 +101,79 @@ For each extracted item, assign a score:
 | ⚠️ Maybe | Useful in context but generic or already known — capture only if novel to you |
 | ❌ Skip | Noise, filler, already well-known, or too vague to be useful |
 
-Show the scored list. Be ruthless — most items from a good video should score ✅ or ⚠️, but intro/outro fluff, obvious statements, and pure context should be ❌.
+The reason must be specific — not "good insight" but *why* it's worth keeping or cutting.
+
+Example scored list with overlap:
+```
+1. ✅ Capture — novel framing I haven't seen; directly applicable to current architecture
+
+2. ~ Overlap detected (91%) — "Confidence-based model routing"
+   Summary: Use a confidence threshold to decide whether to escalate from a cheap to an expensive model.
+   Recommendation: downgrade to ❌ — already well-captured; no new angle here.
+   ❌ Skip — already in brain with same framing; nothing new added
+
+3. ❌ Skip — intro context, no standalone value
+
+4. ✅ Capture — concrete technique with a named pattern, easy to act on
+
+5. ⚠️ Maybe — solid principle but vague without surrounding context
+```
 
 After scoring, show a summary: `X items to capture, Y maybes, Z skipped.`
 
-Ask the user: **"Capture all ✅ items now? Or review the list first?"**
+---
+
+## Phase 2.5 — Draft (Always Runs)
+
+Before any captures, draft the full text for every ✅ item (and any ⚠️ items the user confirms). Show all drafts as a numbered list so the user can review wording, request trims, or cut items before anything hits the brain.
+
+For each draft:
+- Write it as a complete, self-contained sentence or short paragraph — not a fragment
+- Include enough context that it makes sense without the source video
+- Always append `Source: <Channel> - <Video Title> <url>` at the end of the text when a URL was provided — the human-readable label enables grouping by source, the URL gets extracted into the `urls[]` database field
+- Keep it tight — trim filler, hedging, and re-stated context from the source
+
+Example:
+```
+Draft 1: "Agentic system design principle: separate memory (Postgres/pgvector), compute
+(Edge Functions/LLM calls), and interface (MCP/Discord/CLI) into distinct layers. Each
+layer should be independently replaceable. Source: Nate B Jones - Why Agents Fail https://youtu.be/FtCdYhspm7w"
+
+Draft 2: ...
+```
+
+After showing all drafts, ask: **"Capture these now, or any changes first?"**
+
+If `--commit` was NOT specified (the default), stop here and wait for the user to confirm or request edits before proceeding to Phase 3.
 
 ---
 
 ## Phase 3 — Synthesize (Capture to Second Brain)
 
-If `--dry-run` was specified, skip all `capture_thought` calls and instead print each thought as it would be captured — formatted exactly as it would appear in the brain — then print the final summary with `[DRY RUN — nothing captured]`. This lets the user review and tune before committing.
+For each approved draft, call `capture_thought` with:
+- `text`: The draft text (self-contained, includes `Source:` label at end with all relevant URLs)
+- `source`: `"{platform}: {Author} - {Title}"` — canonical platform; see format below
+- `is_external`: `true` (always — pan is for external content by definition)
 
-For each ✅ item (and any ⚠️ items the user confirms), call `capture_thought` with a well-formed thought:
+**Source field format:** `{platform}: {Author/Channel} - {Title}`
 
-- Write it as a complete, self-contained sentence or short paragraph — not a fragment
-- Include enough context that it makes sense without the source video
-- Add the source URL if one was provided
-- Tag with relevant topics so it surfaces in future searches
+Single source examples:
+```
+youtube: Nate B. Jones - You're Wasting 40% Of Your AI Time On Something Fixable
+substack: Nate B. Jones - Codex Plugins Matter Because the Bottleneck Moved
+article: Author Name - Article Title
+podcast: Show Name - Episode Title
+```
 
-Example capture for item 1 above:
-> "Agentic system design principle: separate memory (Postgres/pgvector), compute (Edge Functions/LLM calls), and interface (MCP/Discord/CLI) into distinct layers. Each layer should be independently replaceable. Source: https://youtu.be/FtCdYhspm7w"
+Dual source (YouTube + companion Substack):
+```
+source field: "substack: {Author} - {Title}"  ← canonical = the written article
+Both URLs appear in the capture text:
+  "... Source: Author - Title <youtube_url> <substack_url>"
+The urls[] field will contain both URLs for traceability.
+```
 
-Capture each item one at a time using the `capture_thought` MCP tool. Show the confirmation receipt for each (`✓ Captured: title [category]`).
+Show the confirmation receipt for each (`✓ Captured: title [category]`).
 
 After all captures are done, print a final summary:
 ```
@@ -101,7 +187,7 @@ Panning complete.
 
 ## Future Enhancements
 
-- **Conflict detection (Phase 2.5)** — Before capturing each ✅ item, run `semantic_search` to find existing thoughts with >80% similarity. Surface conflicts side-by-side and ask: confirm conflict (capture with `contradicts` tag + old ID), update existing thought, or skip. Adds 1 MCP call per item but prevents silent contradictions accumulating in the brain.
+- **Update existing from overlap** — When Phase 2 overlap is detected, offer an "update existing thought" action instead of just skip/downgrade. Deferred until overlap detection workflow is proven in practice.
 
 ## Rules
 

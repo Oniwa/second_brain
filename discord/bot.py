@@ -91,9 +91,12 @@ def parse_people_flag(text: str) -> tuple[str, list[str]]:
     return cleaned, people
 
 
-def capture_thought_sync(supabase_url: str, service_role_key: str, text: str) -> dict:
+def call_process_thought_sync(supabase_url: str, service_role_key: str, text: str, thought_id: str | None = None) -> dict:
     url = f"{supabase_url}/functions/v1/process-thought"
-    body = json.dumps({"text": text, "source": "discord"}).encode("utf-8")
+    payload: dict = {"text": text, "source": "discord"}
+    if thought_id:
+        payload["id"] = thought_id
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url, data=body,
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {service_role_key}"},
@@ -108,6 +111,10 @@ def capture_thought_sync(supabase_url: str, service_role_key: str, text: str) ->
             return {"error": json.loads(raw).get("error", raw)}
         except json.JSONDecodeError:
             return {"error": raw}
+
+
+def capture_thought_sync(supabase_url: str, service_role_key: str, text: str) -> dict:
+    return call_process_thought_sync(supabase_url, service_role_key, text)
 
 
 async def generate_embedding(session: aiohttp.ClientSession, text: str, openai_key: str) -> list:
@@ -225,6 +232,8 @@ class SecondBrainBot(discord.Client):
             await self.handle_brain_query(message, text[7:].strip())
         elif text.lower().startswith("!prep "):
             await self.handle_meeting_prep(message, text[6:].strip())
+        elif text.lower().startswith("!update "):
+            await self.handle_update(message, text[8:].strip())
         else:
             await self.handle_capture(message, text)
 
@@ -269,6 +278,51 @@ class SecondBrainBot(discord.Client):
             await thread.send(receipt)
         except discord.HTTPException:
             await message.reply(receipt, mention_author=False)
+
+    async def handle_update(self, message: discord.Message, text: str) -> None:
+        # Expected format: <uuid> <new text>
+        UUID_RE = re.compile(r"^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+(.+)$", re.IGNORECASE | re.DOTALL)
+        match = UUID_RE.match(text)
+        if not match:
+            await message.reply("Usage: `!update <id> <new text>`", mention_author=False)
+            return
+
+        thought_id, new_text = match.group(1), match.group(2).strip()
+        try:
+            await message.add_reaction("⏳")
+        except discord.HTTPException:
+            pass
+
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, call_process_thought_sync,
+            self.env["SUPABASE_URL"], self.env["SUPABASE_SERVICE_ROLE_KEY"], new_text, thought_id,
+        )
+
+        try:
+            await message.remove_reaction("⏳", self.user)
+        except discord.HTTPException:
+            pass
+
+        if "error" in result:
+            await message.add_reaction("❌")
+            await message.reply(f"Update failed: {result['error']}", mention_author=False)
+            return
+
+        if result.get("duplicate"):
+            await message.add_reaction("⚠️")
+            await message.reply(
+                f"⚠️ Duplicate content already exists: **{result['title']}** [{result['category']}]\nID: `{result['id']}`",
+                mention_author=False,
+            )
+            return
+
+        await message.add_reaction("✅")
+        confidence = int(result["confidence"] * 100)
+        await message.reply(
+            f"**{result['title']}** [{result['category']}] — {confidence}% confidence\n"
+            f"Status: `{result['status']}` · ID: `{result['id']}`",
+            mention_author=False,
+        )
 
     async def handle_brain_query(self, message: discord.Message, query: str) -> None:
         if not query:

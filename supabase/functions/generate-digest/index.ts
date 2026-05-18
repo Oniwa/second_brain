@@ -20,6 +20,8 @@ Given the list of their active thoughts below, produce a digest with exactly thi
 ⏳ One thing that's been sitting:
 [A thought captured more than 2 days ago that hasn't been acted on]
 
+For "Top 3 actions" and "One thing that's been sitting": only draw from [PERSONAL] thoughts. [EXTERNAL] thoughts are insights from other people's content — use them only to inform themes and patterns, never as personal to-dos.
+
 Keep the entire digest under 150 words. Be specific — use the actual titles and details from their thoughts, not generic advice. If there are fewer than 3 action items, list what exists.`;
 
 const WEEKLY_PROMPT = `You are a personal assistant generating a weekly digest from someone's second brain.
@@ -41,6 +43,8 @@ Given the list of their active thoughts below, produce a digest with exactly thi
 
 📚 Reading list reminder:
 [List their queued books, or note if none are captured]
+
+For "Top 3 actions" and "One thing that's been sitting": only draw from [PERSONAL] thoughts. [EXTERNAL] thoughts are insights from other people's content — use them only to inform themes and patterns, never as personal to-dos.
 
 Keep the entire digest under 250 words. Be specific and direct — use actual titles and names from their data.`;
 
@@ -68,6 +72,8 @@ Produce a review with exactly this structure:
 💬 Honest reflection:
 [One candid observation — something they might be avoiding, a pattern in their captures, or a tension between two things they care about. Be direct but kind.]
 
+For "Top 3 actions" and "One thing that's been sitting": only draw from [PERSONAL] thoughts. [EXTERNAL] thoughts are insights from other people's content — use them only to inform themes and patterns, never as personal to-dos.
+
 Keep the entire review under 500 words. Use actual titles and names from the data. Write in second person ("you").`;
 
 interface Thought {
@@ -79,6 +85,7 @@ interface Thought {
   topics: string[];
   created_at: string;
   source: string;
+  is_external: boolean;
 }
 
 function formatThoughts(thoughts: Thought[]): string {
@@ -86,10 +93,11 @@ function formatThoughts(thoughts: Thought[]): string {
     const age = Math.floor(
       (Date.now() - new Date(t.created_at).getTime()) / (1000 * 60 * 60 * 24)
     );
+    const tag = t.is_external ? "[EXTERNAL]" : "[PERSONAL]";
     const lines = [
-      `${i + 1}. [${t.category}] ${t.title}`,
+      `${i + 1}. [${t.category}] ${t.title} ${tag}`,
       `   Summary: ${t.summary}`,
-      t.action_items.length ? `   Actions: ${t.action_items.join(" | ")}` : "",
+      (!t.is_external && t.action_items.length) ? `   Actions: ${t.action_items.join(" | ")}` : "",
       t.people.length ? `   People: ${t.people.join(", ")}` : "",
       t.topics.length ? `   Topics: ${t.topics.join(", ")}` : "",
       `   Captured: ${age} day(s) ago via ${t.source}`,
@@ -172,7 +180,7 @@ serve(async (req) => {
 
   const { data: thoughts, error } = await supabase
     .from("thoughts")
-    .select("title, summary, category, action_items, people, topics, created_at, source")
+    .select("title, summary, category, action_items, people, topics, created_at, source, is_external")
     .eq("status", "active")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false });
@@ -198,7 +206,7 @@ serve(async (req) => {
     weekAgo.setDate(weekAgo.getDate() - 7);
     const { data: archived } = await supabase
       .from("thoughts")
-      .select("title, summary, category, action_items, people, topics, created_at, source")
+      .select("title, summary, category, action_items, people, topics, created_at, source, is_external")
       .eq("status", "archived")
       .gte("updated_at", weekAgo.toISOString())
       .order("updated_at", { ascending: false });

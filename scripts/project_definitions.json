@@ -1,0 +1,7 @@
+{
+  "Second Brain": ["compile_wiki.py", "wiki compilation", "wiki_implementation", "MCP server", "Discord bot", "audit page", "process-thought", "cron automation", "stale detection"],
+  "Meal Planner": ["meal planning", "Fitbit integration", "Django", "nutrition", "health metrics"],
+  "Board Game Inventory": ["board games", "board game collection", "board game inventory"],
+  "ABUCW": ["ABU Consolidated Website", "ABUCW", "Inventory API"],
+  "Project Forecasting": ["Project Forecasting"]
+}
