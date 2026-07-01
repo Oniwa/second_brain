@@ -25,14 +25,31 @@ If the transcript fetch fails (video unavailable, transcripts disabled, IP block
 
 Before Phase 1, check whether this source has already been panned:
 
-**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately. If any results reference either URL, warn the user:
+**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately.
+
+When inspecting results, **match on the URL field, not just similarity rank** — a reminder-style thought ("watch and pan this video") can rank above the actual captured insights, so scan every returned result's `URLs:` line for the target URL before deciding. For each result whose `URLs:` line contains the target URL, note its **source label** (the `Source:` line) and its `is_external` status.
+
+If any results reference either URL, warn the user, grouped by source label with counts:
 ```
-⚠️ This source may already be in your brain — found N thoughts from this URL:
-  - "Thought title one"
-  - "Thought title two"
-  ...
+⚠️ This source may already be in your brain — found N thoughts referencing this URL:
+
+  Source: "substack: Nate B. Jones - <label>"  (N thoughts)
+    - "Thought title one"
+    - "Thought title two"
+    ...
+
 Continue panning anyway, or stop here?
 ```
+
+**Split-source / mislabel flag:** If the target URL appears under a source label whose title clearly describes a *different* topic than the current video/article (e.g. the URL is a YouTube video about the implementation layer, but the source label names a Substack about SaaS pricing), add this note to the warning:
+```
+⚠️ Note: this URL is co-labeled under a source titled "<other label>", which looks
+like a different topic. The source may have been panned before but stamped with a
+companion URL. Treat most of this content as already captured — pan only for
+genuinely NEW insights not surfaced by the overlap checks below.
+```
+In this case, recommend the user continue but capture only net-new items (verified via Phase 2 overlap checks), rather than re-running a full pan.
+
 Stop and wait for confirmation before proceeding to Phase 1.
 
 **If raw text was provided (no URL):** Use the source label the user provides (e.g. "Q1 planning meeting", "Smith et al 2024") as the search query. If 3 or more results reference that same source label, show the same warning above.
