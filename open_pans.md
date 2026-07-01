@@ -15,7 +15,7 @@ _Last synced from database: 2026-07-01 (direct PostgREST query on source=discord
 
 These were submitted to #sb-inbox but were missing from this tracker (semantic_search/list_recent couldn't enumerate them). Verified via direct DB query — 11 total since 6/18: 9 open below, 2 already handled (EPEI-IIPu4E archived 6/22; CBcyKfpldTo panned & archived 7/1).
 
-- [ ] Pan for gold — https://youtu.be/BOXK2XFLA-E (6/18, due end of June) — Nate B. Jones "Don't build more AI agents until you watch this" (engineering panic) — `39d0e402-ee3f-4ed9-baa9-1595cdcd8b65`
+- [x] Pan for gold — https://youtu.be/BOXK2XFLA-E (6/18, due end of June) — Nate B. Jones "Don't build more AI agents until you watch this" (engineering panic) — `39d0e402-ee3f-4ed9-baa9-1595cdcd8b65` — already fully panned 6/23 (20 thoughts under "substack: Nate B. Jones - Vercel deleted 80% of its agent's tools and the agent got better"); reminder archived 7/1
 - [ ] Pan for gold — https://youtu.be/F4At4St1iH8 (6/21, due end of June) — Simon Scrapes "Claude Code Agentic OS... It Remembers Everything" (long-term memory; relevant to second brain) — `174e832a-8d84-49a8-ba30-f2d20b42ff67`
 - [ ] Pan for gold — https://youtu.be/9PUaEj0pMYE (6/21, due end of June) — Nate B. Jones "Your AI Skills Are Trapped | Here's How to Own Them" (AI agents locked to one place) — `7cc538c6-a0b4-483c-bbf6-172fde5c064e`
 - [ ] Pan for gold — https://youtu.be/rh_PcL26zls (6/21, due end of June) — Nate B. Jones "Most Teams Skip This Critical AI Agent Skill in 2026" (agent ownership/accountability) — `ec8d3631-738e-48fd-8055-be4a6f92e59a`
