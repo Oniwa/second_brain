@@ -39,3 +39,25 @@ Review whether `get_context` and `meeting_prep` are leveraging the full capture 
 Karpathy's log.md mechanism works because the AI reads the *history of interactions*, not just stored facts. Check if our equivalent (timestamped thought captures) is being used as effectively as possible in context assembly.
 
 **Phase:** 4–5 (review task, may surface as a quick win)
+
+---
+
+## 4. Exact URL Lookup Tool (`find_by_url`)
+
+**Problem (proven 2026-07-01):** We capture every source URL in each thought's `urls[]` field, but no tool can *retrieve* a thought by its URL. `semantic_search` is embedding-only — it matches on meaning, and a URL string carries no semantic meaning. As a result:
+- Searching a video URL (or bare video ID) ranks the short "watch/pan this" *reminder* at the top and never surfaces the actual captured insights, because the reminder's embedding is dominated by the URL while the real captures' embeddings are dominated by their concepts.
+- `get_context` rejects URL-only queries outright (`"text required"`).
+
+This is the root cause of the recurring pan-dedup blind spot: sources that were already fully panned (jwtpMSRAPAQ, ltbzgzZZmgI, l8BloTSLK6M, n0nC1kmztSk, UsCgEuIAclE) all initially looked "unpanned" on a URL search. The `/pan` skill currently works around this with a 3-part lookup (direct URL → follow reminder's companion URL → topical fallback), but that's fuzzy and depends on guessing the topic.
+
+**Fix:** Add a deterministic exact/substring lookup on the `urls[]` field so a single call reliably returns every thought referencing a URL.
+
+**Possible interface:**
+```
+find_by_url(url: string, status?: active|archived|all) → thoughts whose urls[] contains url
+```
+Implementation: DB-level `WHERE urls @> ARRAY[url]` for exact match, or `ILIKE '%<videoID>%'` across the `urls[]` field to tolerate tracking-param differences (`?si=`, `?is=`) and youtu.be vs youtube.com/watch forms. Normalize/canonicalize URLs (strip query params, unify host) before matching.
+
+**Downstream:** Once available, simplify `/pan` Step 0b to call `find_by_url` first as the authoritative dedup check, keeping the topical fallback only as a secondary net.
+
+**Phase:** 4 (higher priority — fixes an active, recurring correctness bug in pan dedup)
