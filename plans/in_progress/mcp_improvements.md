@@ -61,3 +61,25 @@ Implementation: DB-level `WHERE urls @> ARRAY[url]` for exact match, or `ILIKE '
 **Downstream:** Once available, simplify `/pan` Step 0b to call `find_by_url` first as the authoritative dedup check, keeping the topical fallback only as a secondary net.
 
 **Phase:** 4 (higher priority — fixes an active, recurring correctness bug in pan dedup)
+
+---
+
+## 5. Pan Queue Visibility (Discord-captured videos as a first-class queue)
+
+**Problem (proven 2026-07-01):** One of the primary uses of the Discord `#sb-inbox` is capturing YouTube videos to "pan for gold." But every Discord message — pan requests, stray thoughts, meeting notes — lands in one undifferentiated `thoughts` bucket with `source=discord`. A "pan this video" is a *task with a lifecycle* (submitted → panned → archived), yet it is stored identically to a knowledge insight. The only retrieval surfaces are `semantic_search` (matches meaning — blind to URLs and to "this is a to-do") and `list_recent` (hard-capped at 50, no pagination/date-exact filter). Result: pan reminders silently pile up and get lost. On 2026-07-01, 11 pan submissions since 6/18 were invisible to every MCP tool; only a direct PostgREST query (`source=eq.discord&created_at=gte.…`) surfaced the ground truth, and `open_pans.md` had drifted out of sync (missing 9 of them).
+
+The reliable primitive already exists (a `source=discord` + YouTube-URL + `status=active` query returns the exact set); it just is not wired into any surface the user actually looks at. Archiving the reminder already serves as the "done" signal.
+
+**Fixes, ranked by leverage ÷ effort:**
+
+1. **First-class pan type at capture time** *(structural root fix)* — In `process-thought`/`discord/bot.py`, when a Discord message has a YouTube URL + pan intent ("pan/review this video for gold"), tag it `category=pan_queue` (or add a `pan_status: open` field). Turns an invisible thought into a queryable queue item, robust even for CLI-submitted or oddly-worded pans. Requires a small classification-prompt/schema tweak.
+2. **`brain.py --pending-pans` + Discord `!pans` command** *(instant on-demand visibility, ~20 lines, works today with no schema change)* — Runs the `source=discord` + YouTube-URL + `status=active` query and lists open pans oldest-first with age. Reliable primitive; overlaps with `find_by_url` (#4) infrastructure.
+3. **Dedicated "🎬 Open pans (N)" section in the daily/weekly digest** *(passive recurring visibility)* — The digest (`generate-digest` edge fn + `discord/digest.py`) already lands in Discord DM + Gmail. Add a section listing open pans and the oldest age. They can't rot unseen if every digest shows the backlog.
+4. **Pan-aware nudge** *(escalation)* — Extend `scripts/nudge.py`: if open pans exceed N or age past a threshold, DM "9 videos waiting to pan, oldest 13 days." Turns silence into an actionable backlog alert.
+5. **Auto-generate `open_pans.md`** *(kills tracker drift — the root of the 2026-07-01 mess)* — `brain.py --sync-pans` writes the tracker from the DB instead of hand-editing, so it never falls out of sync again.
+
+**Recommended sequencing:** #2 first (immediate relief, no schema change), then #1 + #3 as the durable fix, with #4/#5 as cheap add-ons once the query helper exists.
+
+**Relationship to #4:** Both stem from the same root — URLs and task-state are not first-class in retrieval. `find_by_url` (#4) fixes *dedup lookups*; this item fixes *backlog enumeration/visibility*. They can share a canonical-URL normalization helper and the same PostgREST query layer.
+
+**Phase:** 4 (item #2 is a quick win; #1/#3 durable)
