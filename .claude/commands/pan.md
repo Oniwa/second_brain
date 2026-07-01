@@ -25,9 +25,15 @@ If the transcript fetch fails (video unavailable, transcripts disabled, IP block
 
 Before Phase 1, check whether this source has already been panned:
 
-**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately.
+**If a URL was provided:** You must be able to find prior pans from *whatever* URL the user gives you — do not assume the user will supply the companion Substack URL. A single video-URL search is not sufficient, because a batch pan often stamps the captured insights with a *companion* Substack URL and labels them under the Substack's title, so a plain video-URL search ranks the short "watch/pan this" reminder at the top and buries (or never surfaces) the real captures. Run this full lookup for **every** URL provided, with `limit: 25`:
 
-When inspecting results, **match on the URL field, not just similarity rank** — a reminder-style thought ("watch and pan this video") can rank above the actual captured insights, so scan every returned result's `URLs:` line for the target URL before deciding. For each result whose `URLs:` line contains the target URL, note its **source label** (the `Source:` line) and its `is_external` status.
+1. **Direct URL search** — Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`, status `all`, limit 25). Scan **every** result's `URLs:` line for the target URL — do not stop at the top hit.
+2. **Follow the reminder's companion URL** — If any match is a reminder-style thought ("watch and pan this video"), read its full text (`get_thought`) and extract any *other* URL it references (a companion Substack/article). Run `semantic_search` on that companion URL too (status `all`, limit 25). This is usually what surfaces the real captures.
+3. **Topical fallback** — After fetching the transcript (Step 0a), derive the video's core topic/title and run a `semantic_search` (or `get_context`) on that topic. Captures that carry the URL only in the `urls[]` field but rank poorly against the raw URL string will surface here.
+
+**Do not conclude "not yet panned" until all three lookups come up empty.** A reminder thought referencing the URL is *not* evidence the source is unpanned — it is only the to-do; the actual insights may still exist under a companion-URL/Substack label.
+
+When inspecting results, **match on the URL field, not just similarity rank**. For each result whose `URLs:` line contains the target URL (or that clearly covers the same content), note its **source label** (the `Source:` line) and its `is_external` status.
 
 If any results reference either URL, warn the user, grouped by source label with counts:
 ```
@@ -199,6 +205,19 @@ Panning complete.
   Captured:  N thoughts → second brain
   Skipped:   N items
 ```
+
+---
+
+## Phase 4 — Archive the "to pan" Reminder (Always Runs)
+
+A pan is not finished until its to-do is cleared. After Phase 3 — **and also whenever the duplicate pre-check reveals the source was already fully panned** (i.e. even if you capture nothing new) — locate and archive the reminder thought that asked you to pan this source, if one exists.
+
+1. From the Step 0b lookups you already ran, identify the reminder-style thought for this source — a short "watch/pan this video", "review & extract insights", "pan for gold" thought whose `URLs:` line contains the provided URL.
+2. If one exists, call `archive_thought` with its ID so it stops showing up as an open pan.
+3. Confirm to the user: `✓ Archived reminder: "<title>" (<id>)`. If no reminder thought exists, say so and move on — do not fabricate one.
+4. If the user keeps an external open-pans tracker (e.g. `open_pans.md`), check the corresponding item off there too.
+
+Only archive genuine reminder/to-do thoughts — never archive the captured insight thoughts themselves.
 
 ---
 
