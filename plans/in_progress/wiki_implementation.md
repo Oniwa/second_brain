@@ -315,6 +315,26 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 15. Daily stale detection cron (Pi)
 16. Autobiography mode added to `compile_wiki.py`
 
+**Priority note (2026-07-01):** Bump Phase 2 (the `thought_edges` graph layer) up in priority. The link graph is the piece that most differentiates a "brain" from mere storage — it is currently the biggest gap versus a file-based/Obsidian-style system, where dense entity links are what let an agent resolve "send the invite to John." Until edges exist, cross-linking is limited to text-only "Related" sections. Source of this framing: Dan Martell - This AI System Will Make You So Smart (panned 7/1, `b4d32pBa3UY`).
+
+### Enhancements from Dan Martell "AI second brain" pan (2026-07-01)
+
+Source: youtube: Dan Martell - This AI System Will Make You So Smart It's Almost Unfair (`b4d32pBa3UY`). Panned 7/1; these are the net-new ideas from that video not already covered by the hybrid design.
+
+**1. Add `decision` and `company` as first-class entity page types.**
+Martell makes `decisions` and `companies` first-class folders in his vault; our wiki only has topic/person/project pages. Adding them would let the brain answer "what did I decide about X, how, and what were the alternatives?" and "what do I know about company Y?" directly from a compiled page instead of re-deriving from scattered captures.
+- **Decision page** — trigger: `category = 'decision'` (or a `decisions` topic tag) ≥ 2 thoughts; slug `decision-{kebab}`. Sections: Decision / Rationale (how it was decided) / Alternatives Considered / Date & Status / Related. Aligns with Martell's "what did I decide, how, and what were the alternatives."
+- **Company page** — trigger: `companies @> [name]` or `company` topic ≥ 2 thoughts; slug `company-{name}`. Sections: Overview / Research & Competitors / Interactions / Open Threads / Related.
+- Open question: do captures already carry enough `category`/`topics` signal to detect these, or is a new classifier column / people-alias-style anchor map needed? (Mirror the `project_definitions.json` anchor approach if so.)
+
+**2. Visual graph view — low-priority Phase 3, scoped as a diagnostic tool (not daily-use).**
+Obsidian's graph view "feels like a brain" but its real value for a solo user is *maintenance diagnostics*, not retrieval (semantic search + compiled pages already handle retrieval). Build it only after `thought_edges` exists and scope it to surface:
+- **Orphans** — entities/thoughts with 0 edges → candidates for consolidation or deletion.
+- **Dense hubs** — topics with > N thoughts/edges → candidates to split into MOC-style sub-pages.
+- **Bridge nodes** — unexpected cross-domain connections worth a dedicated page.
+- **Cheaper 80% alternative first:** most of this diagnostic value comes from plain SQL over `thought_edges` (e.g. `entities with 0 edges`, `topics with > N thoughts`) — ship those queries before investing in a hosted D3/force-directed visualization. Treat the actual visual as optional polish.
+
+
 ### Separately — Pan Skill Improvements
 - ✓ Always dry-run first (`--commit` flag to skip; default is always preview)
 - ✓ Reason required for every Phase 2 score (specific why, not just badge)
