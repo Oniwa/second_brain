@@ -7,9 +7,9 @@ _Last synced from database: 2026-07-01 (direct PostgREST query on source=discord
 ## Explicit "pan for gold" items
 
 - [x] Pan for gold — https://youtu.be/z73yuF14udI (saved 6/15, due end of June) — `10326597-0981-4c53-b4c3-c9a5b2d3fa78` — already fully panned 6/19 (~17 thoughts under "Opus 4.8 scored 81 in my benchmark"); promptkit URL already captured in `7db32d9f`; reminder archived
-- [ ] Pan video for gold — https://youtu.be/C2Izj7hxIlE (saved 6/14, due end of June) — `7951c7d0-fca2-4580-acda-5d8410865991`
-- [ ] Pan video for gold — https://youtu.be/mNawxNjrR_E (saved 6/12, due end of June) — `ad460fc5-6b37-4f54-b6c3-9f23d91ccee1`
-- [ ] Review & compact gold handling video — https://youtu.be/dtAJ2dOd3ko (saved 6/11, due June 30) — `12f15817-61db-45f8-9b02-7a5e28d2333d`
+- [x] Pan video for gold — https://youtu.be/C2Izj7hxIlE (saved 6/14, due end of June) — `7951c7d0-fca2-4580-acda-5d8410865991` — already fully panned 6/22 (12 thoughts under "Simon Scrapes - Claude Code Masterclass for People Who Don't Code"); reminder archived 7/1
+- [x] Pan video for gold — https://youtu.be/mNawxNjrR_E (saved 6/12, due end of June) — `ad460fc5-6b37-4f54-b6c3-9f23d91ccee1` — already fully panned 6/22 (8 thoughts under "Simon Scrapes - 14 GENIUS Ways to Give Claude Code SUPERPOWERS"); reminder archived 7/1
+- [x] Review & compact gold handling video — https://youtu.be/dtAJ2dOd3ko (saved 6/11, due June 30) — `12f15817-61db-45f8-9b02-7a5e28d2333d` — already fully panned 6/19 (9 thoughts under "Matt Pocock - /handoff is my new favourite skill"); reminder archived 7/1
 
 ## Recent discord submissions (since 6/18) — newly reconciled 7/1
 
