@@ -80,32 +80,26 @@ are complete, delete the fetched transcript `.txt` from the working directory.
 
 ---
 
-### A3. Density-fatigue guidance  (lowest priority — a nudge, not a mechanism)
+### A3. Density-fatigue guidance  — REJECTED (misaligned with user workflow)
 
-**Problem.** When a creator is already heavily represented, marginal novelty drops and
-aggregate overlap rises, but nothing in the skill raises the capture bar.
+**Original idea.** When a creator is already heavily represented, raise the capture
+bar and prefer fewer captures, on the theory that aggregate overlap is rising.
 
-**Evidence (2026-07-02).** Four consecutive Nate B. Jones pans; by the 3rd–4th the
-agent manually reminded itself to "be ruthless." The harness concept hit 62–70%
-against existing captures; the moat/lock-in cluster was densely pre-represented.
+**Why it's rejected (user input, 2026-07-02).** The user deliberately watches *every*
+Nate B. Jones video and hand-picks which to add — they consistently find his takes
+valuable. A dense Nate footprint is therefore the **intended result of deliberate
+source-level curation, not accidental bloat.** A "creator is well-represented → raise
+the bar" heuristic is actively backwards here: it would penalize the exact creator the
+user has chosen to over-index on, and risk dropping a genuinely novel take.
 
-**Why it has independent value.** Pairwise overlap checks (A1 / B2) are *per-thought*
-and miss **aggregate saturation** — 10 items each individually <60% similar can
-collectively be the 5th rehash of one author's worldview. Only source-level awareness
-catches that.
+**The correct guard is concept-level, not creator-level.** The real failure mode is
+*the same concept captured twice*, regardless of who said it — which is already handled
+by A1 (intra-batch overlap) and B2 (threshold recalibration). Source volume is not a
+signal to suppress; per-concept duplication is.
 
-**Honest caveats.**
-- Soft heuristic — "well-represented" is hard to make precise.
-- Risks the *opposite* failure: under-capturing a genuinely novel angle out of fatigue.
-- Largely a backstop the **user already provides** via the dry-run + trim step.
-
-**Proposed change (pan.md).** One line in Phase 2:
-> If this source's creator/topic is already densely represented in the brain, raise
-> the capture bar and prefer fewer, higher-novelty captures — but never skip a
-> genuinely new angle just because the creator is familiar.
-
-**Recommendation:** ship as a one-line nudge only; accept it may be redundant once B2
-lands. Do not build a mechanism for it.
+**Decision:** do **not** add any creator/source-saturation nudge to `pan.md`. Rely on
+A1 + B2 for concept-level de-duplication and leave source-level curation to the user,
+who already does it upstream by watching everything and choosing what to pan.
 
 ---
 
@@ -170,12 +164,13 @@ spec should be reconciled to this one.
 | B1 | Trims + merges first-class | **High** | Requested on every pan; the biggest gap between skill-as-written and skill-as-used. |
 | B2 | Recalibrate thresholds (65%→~55%) | **Medium** | Unblocks A1; surfaces the real overlap band. Reconcile with wiki spec. |
 | A2 | Transcript cleanup | **Medium** | Trivial, removes repo-root litter. |
-| A3 | Density-fatigue nudge | **Low** | One-line nudge; largely subsumed by A1/B1/B2 and the user's own trim step. |
+| A3 | Density-fatigue nudge | **Rejected** | Misaligned with user workflow — dense creator footprint is deliberate curation, not bloat. Guard concepts (A1/B2), not creators. |
 
 ---
 
 ## Verification
-1. Read the updated `pan.md` and confirm A1, A2, B1, B2 (and optionally A3) are present.
+1. Read the updated `pan.md` and confirm A1, A2, B1, B2 are present (A3 is rejected —
+   confirm no creator/source-saturation nudge was added).
 2. Run a batch of 2+ related pans next session — confirm the agent surfaces a
    same-session near-dup below 65% (A1/B2) and proposes trims/merges unprompted (B1).
 3. Confirm the transcript `.txt` is deleted after each pan (A2).
