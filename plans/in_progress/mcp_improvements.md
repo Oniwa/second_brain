@@ -83,3 +83,27 @@ The reliable primitive already exists (a `source=discord` + YouTube-URL + `statu
 **Relationship to #4:** Both stem from the same root — URLs and task-state are not first-class in retrieval. `find_by_url` (#4) fixes *dedup lookups*; this item fixes *backlog enumeration/visibility*. They can share a canonical-URL normalization helper and the same PostgREST query layer.
 
 **Phase:** 4 (item #2 is a quick win; #1/#3 durable)
+
+---
+
+## 6. `get_stats` All-Time Counts Are Capped at 1000 (bug)
+
+**Problem (proven 2026-07-02):** `get_stats` reports `Total: 1000, active: 1000, archived: 0` — a suspiciously round number and a flat-wrong `archived: 0` (191 thoughts are actually archived). Direct PostgREST exact counts give the truth: **1,840 total / 1,649 active / 191 archived**.
+
+**Root cause:** `getStats` (`mcp/src/server.ts` ~line 151) does:
+```ts
+supabase.from("thoughts").select("status")   // fetch all rows, tally in JS
+```
+It pulls every row and counts statuses client-side, but the Supabase/PostgREST client enforces a **default `max-rows` of 1000**, so it silently receives only the first 1000 rows and counts those. Any brain with >1000 thoughts gets truncated, wrong all-time totals and a bogus `archived` count. The 30-day *window* section is unaffected only because it currently sits under 1000.
+
+**Why it matters:** every judgment about the brain's health (growth, archival hygiene, category mix) runs on a lying gauge. "Instrument before you optimize" — this should be fixed before trusting any stats-driven decision.
+
+**Fix:** replace the row-fetch-and-tally with count-only queries — one HEAD request per status plus a total:
+```ts
+supabase.from("thoughts").select("*", { count: "exact", head: true })                     // total
+supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "active")
+// ...archived, needs_review
+```
+`head: true` returns no rows (just the `Content-Range` count), so it's cheap and cap-immune. The 30-day window breakdown can keep fetching rows (it needs category/topic detail) but should also switch to a count query for its totals to stay correct past 1000.
+
+**Phase:** 4 (quick, high-value — unblocks honest measurement)

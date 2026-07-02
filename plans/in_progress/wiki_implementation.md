@@ -609,3 +609,14 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 - `⚠️ TENSION` and `→ EVOLVED` markers appear when content diverges
 - `thought_edges` table is queryable (empty until Phase 2)
 - `stale = false` on freshly compiled pages
+
+---
+
+## Backlog Stub — Concept-Level Dedup / Merge (surfaced 2026-07-02)
+
+Archival hygiene is actually healthy (191 thoughts archived, ~10% of the brain — corrects an earlier "you never prune" critique that was based on a broken `get_stats`). But archival is mostly **reminders/admin**, not **insight dedup**. Concept-level near-duplicate *insights* still accrete unmerged — the same idea captured from multiple sources splits retrieval across near-dups instead of consolidating.
+
+This belongs to the synthesis/contradiction layer: the Phase 2 typed-edge classifier and `thought_edges` are the natural place to detect "these two thoughts are the same concept" (a `DUPLICATE`/`SUBSUMES` edge type) and offer merge, not just contradiction (`TENSION`/`EVOLVED`). Also reconcile the overlap threshold: this plan specifies **85%** for overlap detection, but the `/pan` skill found real conceptual near-dups sitting at **55–64%** (see `pan_skill_improvements.md` item B2) — a single 85% floor misses them. Decide one calibrated threshold (or a two-band scheme) shared across pan-time dedup and wiki-time edge detection.
+
+**Status:** stub — captured 2026-07-02, design deferred to Phase 2 edge work.
+
