@@ -11,6 +11,23 @@ found this session.
 
 ---
 
+## Design principle — two human curation gates
+
+The user curates at two points, both upstream of and within the skill:
+1. **Gate 1 (feed → pan list).** The user watches a video and decides it is worth
+   panning *before* it becomes a "to pan" thought. The pan queue is already
+   human-vetted.
+2. **Gate 2 (pan → brain).** During the pan dry-run, the user picks which insights
+   actually get captured.
+
+**Implication for the skill:** `/pan` runs entirely downstream of the user's judgment.
+It must **never gatekeep whether a source is worth panning** (that was decided at Gate
+1) or suppress captures because a creator is well-represented. Its job is narrow:
+extract thoroughly, avoid capturing the same *concept* twice, and make Gate 2 easy with
+good trims/merges. This is the root reason A3 (creator-saturation nudge) is rejected.
+
+---
+
 ## Cross-reference — already covered elsewhere (do NOT duplicate here)
 
 These pan pain points already have owning plans. Listed so this file is a complete
