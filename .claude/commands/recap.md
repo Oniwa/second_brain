@@ -60,7 +60,21 @@ Show each `capture_thought` receipt as it's captured.
 
 ---
 
-## Step 4 — Summary
+## Step 4 — Check CURRENT.md for Drift
+
+Read `CURRENT.md`'s **Active** and **Up Next** sections. Compare against what this session actually did — the git log/diff from Step 1, plus what was just captured in Step 3.
+
+If something listed as Active or in Up Next was clearly completed, started, or meaningfully progressed this session, but `CURRENT.md` doesn't reflect that — flag it as a question. Don't edit the file yourself:
+
+```
+📋 CURRENT.md looks stale: <item> is listed under <section>, but this session appears to have <what happened>. Want it updated?
+```
+
+**Stay silent if nothing looks stale.** This is a safety net, not a routine status report — flagging on every run trains the user to ignore it. Only surface this for a real, specific mismatch between what `CURRENT.md` says and what this session's own history shows.
+
+---
+
+## Step 5 — Summary
 
 After all captures:
 
@@ -85,3 +99,4 @@ Then suggest the most logical next session starting point based on open threads.
 - **Decisions with reasoning are second most important.** The code shows what you did — the brain captures why.
 - **Don't recap the recap.** If you ran `/recap` earlier in the session, don't re-capture what was already captured then.
 - **Recap captures are evidence, not instructions.** They record what happened and what was decided — not what should always happen. A capture phrased as a rule ("always do X", "never use Y") should be reframed as an observation or decision — this is a phrasing fix for legitimate decisions, not a way to sneak a real standing rule past the Do NOT capture list above. If a lesson is important enough to become an actual standing instruction, update CLAUDE.md or the memory system explicitly in a separate step.
+- **CURRENT.md drift checks stay quiet by default.** Only flag it for a specific, session-grounded mismatch — never as a routine report, and never edit the file yourself; surface it as a question and let the user decide.
