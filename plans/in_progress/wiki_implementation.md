@@ -299,7 +299,7 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 ### Project Pages (partial ✅ — 0-thought issue outstanding)
 13. ✅ **Spec**: Decided on `project_definitions.json` — maps project names to anchor topic keywords; no new schema field needed
 14. ✅ **Implement**: `--project` flag + project system prompt + slug `project-{name}` in `compile_wiki.py`
-15. ⚠️ **Board Game Inventory / Meal Planner**: compiled with 0 thoughts — anchor keywords in `project_definitions.json` don't match actual `topics[]` tags; need to query those thoughts and fix anchors
+15. ⚠️ **Board Game Inventory / Meal Planner**: compiled with 0 thoughts — **diagnosis corrected 2026-07-03**: anchor keywords already match real `topics[]` tags (verified directly). Real cause is a silent 1000-row PostgREST truncation in `get_qualifying_projects` and related functions — same bug class as the `get_stats` fix (`mcp_improvements.md` §6), different call sites. See `plans/in_progress/compile_wiki_pagination_bug.md` (not yet scoped/implemented)
 16. ✅ **Second Brain** (20 thoughts) and **ABUCW** (4 thoughts) pages compiled correctly
 
 ### Wiki Portability (complete ✅)
@@ -555,7 +555,7 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 ## Follow-Up Items (Prioritized)
 
 **Immediate (unblocked):**
-1. ⚠️ **Fix `project_definitions.json`** — Board Game Inventory and Meal Planner anchor keywords don't match actual `topics[]` tags; those project pages have 0 thoughts. Query actual tags and fix.
+1. ⚠️ **Fix `compile_wiki.py` pagination** (corrected 2026-07-03 — was misdiagnosed as an anchor-keyword problem; anchors are already correct) — see `plans/in_progress/compile_wiki_pagination_bug.md`.
 2. ⚠️ **Fix Discord DM 403** — bot returns Forbidden on completion DM; last remaining pre-cron hardening item. Investigate bot DM channel permissions.
 
 **Before scheduling cron (BLOCKER):**

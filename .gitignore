@@ -11,3 +11,5 @@ credentials.json
 token.json
 compiled-wiki/
 dashboard/config.js
+__pycache__/
+*.pyc

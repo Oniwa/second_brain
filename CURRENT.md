@@ -15,12 +15,13 @@
 - **`pan_skill_improvements.md`** → edit `.claude/commands/pan.md`: A1 intra-batch overlap check, A2 delete fetched transcript after pan, B1 make trims+merges proactive in Phase 2.5, B2 lower overlap floor 65%→~55% (real near-dups this week landed at 55–64%, invisible to the current threshold). A3 (creator-saturation nudge) was explicitly rejected — dense Nate B. Jones coverage is deliberate curation, not bloat.
 
 ### Carried over from May (still open)
-- **Fix `project_definitions.json` anchor topics** — Board Game Inventory and Meal Planner still compile with 0 thoughts; anchor keywords don't match actual `topics[]` tags
+- ~~Fix `project_definitions.json` anchor topics~~ — **misdiagnosed**, corrected 2026-07-03: anchors already match real `topics[]` tags. Real cause is a silent 1000-row PostgREST cap in `compile_wiki.py` (same bug class as the `get_stats` fix, different file) — see new stub below
 - **Fix Discord DM 403** — bot returns Forbidden on DM; last pre-cron hardening item
 - **Decide cron location** — Pi vs PC vs on-demand; blocks scheduling weekly wiki recompile
 - **Dashboard item 11 — inline `raw_text` edit in `audit.html`** — no longer blocked (Edge Function update-mode shipped 5/05); just needs the Phase 2 UI (`plans/in_progress/dashboard_audit_plan.md`)
 
 ### Needs more design before implementing
+- **`compile_wiki_pagination_bug.md`** (new stub) — same 1000-row PostgREST silent-cap bug as `get_stats`, now found in `compile_wiki.py` (`get_qualifying_projects` confirmed broken; `get_distinct_topics`/`get_distinct_people`/`fetch_thoughts_for_project` likely also undercounting). Bigger than the original "fix the JSON" task — needs a grill-me pass to scope (shared pagination helper vs. per-site fix, which of the 9 call sites to fix now vs. defer)
 - **`digest_backlog_filter.md`** — recap-sourced open threads keep getting promoted to Top 3 actions; fix sketch exists (stamp `source: "recap"`, add `[BACKLOG]` bucket) but marker choice / promotion path / retroactive backfill are undecided
 - **Proactive resurfacing of external insights** (`open_brain_improvements.md`, bottom) — relevance-linked design agreed (1 insight/day, ~60% relevance floor, gated) but not built; this is the actual fix for the "pull-only synthesis" gap identified in a 2026-07-02 brain-grading session (B+ retrieval, A- overall)
 - **`recall_before_work_skill.md`** (new stub) — `/start`-style skill to auto-pull relevant context at session start; distinct from the item above (automates what the user already does well, vs. fixing what they can't query at all) — needs its own planning session
