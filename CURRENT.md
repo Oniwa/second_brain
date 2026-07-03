@@ -24,6 +24,7 @@
 - **`digest_backlog_filter.md`** — recap-sourced open threads keep getting promoted to Top 3 actions; fix sketch exists (stamp `source: "recap"`, add `[BACKLOG]` bucket) but marker choice / promotion path / retroactive backfill are undecided
 - **Proactive resurfacing of external insights** (`open_brain_improvements.md`, bottom) — relevance-linked design agreed (1 insight/day, ~60% relevance floor, gated) but not built; this is the actual fix for the "pull-only synthesis" gap identified in a 2026-07-02 brain-grading session (B+ retrieval, A- overall)
 - **`recall_before_work_skill.md`** (new stub) — `/start`-style skill to auto-pull relevant context at session start; distinct from the item above (automates what the user already does well, vs. fixing what they can't query at all) — needs its own planning session
+- **`cross_tool_skill_sync.md`** (new stub) — keep `grill-me`/`recap` in sync across Claude Code (Linux home) and GitHub Copilot CLI (Windows work) from one source-controlled copy in this repo; blocked on confirming Copilot's actual `.copilot/skills/<name>/` file layout and scope (repo vs. user-global) from the work PC — current `scripts/link_global_skills.py` is the superseded symlink-based approach, not yet rewritten
 - **Concept-level dedup/merge** (`wiki_implementation.md`, bottom) — near-dup insights across sources still accrete unmerged; deferred to the Phase 2 `thought_edges` classifier; also needs to reconcile the 85% wiki-time threshold against pan's revised ~55% floor (B2 above)
 
 ---
