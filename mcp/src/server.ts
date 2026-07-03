@@ -143,27 +143,36 @@ async function getStats(args: { days?: number }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 30));
 
-  const [windowResult, allTimeResult] = await Promise.all([
+  const [windowResult, totalResult, activeResult, archivedResult, needsReviewResult] = await Promise.all([
+    // NOTE: fetches rows (not a count query), so this is subject to the same
+    // row cap the all-time counts below were fixed for, if capture volume
+    // ever grows past ~1000 within a single window.
     supabase
       .from("thoughts")
       .select("category, topics, created_at, status")
       .gte("created_at", since.toISOString()),
-    supabase
-      .from("thoughts")
-      .select("status"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "archived"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "needs_review"),
   ]);
 
-  if (windowResult.error) throw new Error(`Stats failed: ${windowResult.error.message}`);
-  if (allTimeResult.error) throw new Error(`Stats failed: ${allTimeResult.error.message}`);
+  if (windowResult.error) throw new Error(`Stats failed (window): ${windowResult.error.message}`);
+  if (totalResult.error) throw new Error(`Stats failed (total count): ${totalResult.error.message}`);
+  if (activeResult.error) throw new Error(`Stats failed (active count): ${activeResult.error.message}`);
+  if (archivedResult.error) throw new Error(`Stats failed (archived count): ${archivedResult.error.message}`);
+  if (needsReviewResult.error) throw new Error(`Stats failed (needs_review count): ${needsReviewResult.error.message}`);
 
   const data = windowResult.data ?? [];
 
-  // All-time status counts
-  const statusCounts: Record<string, number> = {};
-  for (const t of allTimeResult.data ?? []) {
-    statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
-  }
-  const totalAllTime = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  // All-time status counts (each an independent exact count — immune to row caps)
+  const statusCounts: Record<string, number> = {
+    active: activeResult.count ?? 0,
+    archived: archivedResult.count ?? 0,
+    needs_review: needsReviewResult.count ?? 0,
+  };
+  const totalAllTime = totalResult.count ?? 0;
+  const unaccountedCount = totalAllTime - (statusCounts.active + statusCounts.archived + statusCounts.needs_review);
 
   // Time-windowed category and topic distribution
   const cats: Record<string, number> = {};
@@ -184,6 +193,9 @@ async function getStats(args: { days?: number }): Promise<string> {
   const reviewAlert = needsReviewCount > 0
     ? [`⚠ ${needsReviewCount} thought(s) need review — use get_needs_review to see them`, ""]
     : [];
+  const driftAlert = unaccountedCount !== 0
+    ? [`⚠ ${unaccountedCount} thought(s) with an unrecognized status — total doesn't match active+archived+needs_review`, ""]
+    : [];
 
   const lines = [
     "**Brain overview (all time)**",
@@ -191,6 +203,7 @@ async function getStats(args: { days?: number }): Promise<string> {
     ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
     "",
     ...reviewAlert,
+    ...driftAlert,
     `**Trends — last ${args.days ?? 30} days**`,
     `Captures this period: ${data.length}`,
     "",

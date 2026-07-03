@@ -86,7 +86,7 @@ The reliable primitive already exists (a `source=discord` + YouTube-URL + `statu
 
 ---
 
-## 6. `get_stats` All-Time Counts Are Capped at 1000 (bug)
+## 6. `get_stats` All-Time Counts Are Capped at 1000 (bug) — ✅ Fixed 2026-07-03
 
 **Problem (proven 2026-07-02):** `get_stats` reports `Total: 1000, active: 1000, archived: 0` — a suspiciously round number and a flat-wrong `archived: 0` (191 thoughts are actually archived). Direct PostgREST exact counts give the truth: **1,840 total / 1,649 active / 191 archived**.
 
@@ -107,3 +107,9 @@ supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status
 `head: true` returns no rows (just the `Content-Range` count), so it's cheap and cap-immune. The 30-day window breakdown can keep fetching rows (it needs category/topic detail) but should also switch to a count query for its totals to stay correct past 1000.
 
 **Phase:** 4 (quick, high-value — unblocks honest measurement)
+
+---
+
+**Resolution (2026-07-03):** Implemented in `mcp/src/server.ts` `getStats()` as 4 explicit named `count: "exact", head: true` queries (total, active, archived, needs_review) run in parallel alongside the windowed row-fetch — total is its own independent unfiltered count, not derived by summing the three statuses. Each query fails fast with a distinct error message identifying which count failed. Added a drift warning (`⚠ N thought(s) with an unrecognized status`) that fires if total ever doesn't equal active+archived+needs_review — possible in theory since `status` has no `NOT NULL` constraint (`001_init.sql:17`), though never observed in practice. The windowed section was deliberately left untouched (it's ~640 rows/30 days today, nowhere near the cap) but got a one-line comment noting it has the same theoretical row-cap risk if capture volume ever spikes.
+
+Verified against `execute_sql` ground truth: **1856 total / 1665 active / 191 archived / 0 needs_review** (matches exactly, no drift). Note the real numbers had grown since this bug was first proven on 2026-07-02 (1,840/1,649/191 then) — the brain gained thoughts in the interim, as expected.
