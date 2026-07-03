@@ -76,9 +76,19 @@ If something listed as Active or in Up Next was clearly completed, started, or m
 
 ## Step 5 — Summary
 
-After all captures:
+After all captures, list what was captured — one line per thought (its auto-generated title and category) grouped by type — followed by the counts:
 
 ```
+Captured this session:
+  Built:
+    - <title> [<category>]
+  Decisions:
+    - <title> [<category>]
+  Learned:
+    - <title> [<category>]
+  Open threads:
+    - <title> [<category>]
+
 Session recap complete.
   Built/shipped: N captured
   Decisions: N captured  
@@ -87,6 +97,8 @@ Session recap complete.
   Total: N thoughts → second brain
   Safety check: [clean, or note what was reframed/excluded and why]
 ```
+
+Omit any group with zero captures rather than printing an empty header.
 
 Then suggest the most logical next session starting point based on open threads.
 
