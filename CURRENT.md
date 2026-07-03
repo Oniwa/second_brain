@@ -1,7 +1,7 @@
 # Current Work
 
 ## Active
-**Nothing in flight.** `get_stats` and the recap safety rules were just fixed (see Recently Shipped) — pick the next item from Up Next below.
+**Nothing in flight.** `get_stats`, the recap safety rules, and the recap CURRENT.md drift-check were just shipped (see Recently Shipped) — pick the next item from Up Next below.
 
 ---
 
@@ -32,6 +32,8 @@
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-07-03 | Recap CURRENT.md drift check | Step 4 added to `recap.md`: compares CURRENT.md's Active/Up Next against session git history, flags a specific mismatch as a question, never auto-edits — flag-only by design |
+| 2026-07-03 | Global skill portability | `grill-me.md` added to repo as canonical source (was global-only, Opus 4.8); stale global `pan.md` and `meal_planner`'s outdated `grill-me.md` reconciled; `cross_tool_skill_sync.md` stub written for Claude Code + Copilot CLI sync across Linux/Windows (design not finalized — see Up Next) |
 | 2026-07-03 | Recap memory-safety rules | Added OB1-derived rules to `.claude/commands/recap.md`: no transcript dumps, no reasoning traces, no silently-captured standing instructions (disambiguated from open-thread TODOs and from decisions merely phrased like commands); self-reporting safety-check line added to the summary template. Plan moved to `plans/done/` |
 | 2026-07-03 | `get_stats` 1000-row cap fixed | Replaced client-side row tally with 4 independent `count: "exact", head: true` queries in `mcp/src/server.ts`; added drift warning if total ≠ active+archived+needs_review; verified against `execute_sql` ground truth (1856/1665/191/0, exact match). `mcp_improvements.md` §6 |
 | 2026-07-02 | Pan backlog fully reconciled | 11 Discord-submitted videos (6/18–6/29) panned or closed out; `open_pans.md` resynced from DB via direct PostgREST query (MCP search tools miss these) |
