@@ -1,4 +1,4 @@
-# Recap Skill — Codify OB1 Memory Safety Rules
+# Recap Skill — Codify OB1 Memory Safety Rules — ✅ Fixed 2026-07-03
 
 ## Context
 
@@ -69,4 +69,16 @@ After the change, the Rules section will read:
 
 ## Note on Scope
 
-The broader OB1 operating rhythm ("recall before work") was also identified as a gap — no retrieve-before-work step exists. That is out of scope here; it would require a separate `/start` or `/context` skill. This plan addresses only the write-back safety rules.
+The broader OB1 operating rhythm ("recall before work") was also identified as a gap — no retrieve-before-work step exists. That is out of scope here; it would require a separate `/start` or `/context` skill. This plan addresses only the write-back safety rules. See `plans/in_progress/recall_before_work_skill.md` (stub, 2026-07-03) for that follow-up — resolved via a grill-me session that it's a distinct, lower-priority idea from the digest push-based resurfacing gap in `open_brain_improvements.md`.
+
+---
+
+## Resolution (2026-07-03)
+
+Implemented in `.claude/commands/recap.md` after a full grill-me review that surfaced and resolved two ambiguities not caught in the original draft:
+
+1. **Do NOT capture** got a third new bullet (standing instructions) that explicitly disambiguates it from the existing "Open thread"/TODO template and from a decision merely phrased like a command — without this, the rule as originally drafted could plausibly have suppressed the skill's own highest-priority capture type (open threads).
+2. **The Rules-section addition** was tightened to cross-reference the Do NOT capture bullet, making explicit that it's a *phrasing fix* for legitimate decisions, not a second path for smuggling a real standing rule past the Do NOT capture gate — the original two bullets read as contradictory (one said "don't capture," the other said "capture but reframe") for the same trigger phrase.
+3. Added a **self-reporting "Safety check" line** to the Step 4 summary template — makes compliance visible on every `/recap` run going forward instead of relying on a one-time manual spot-check.
+
+Verification remains observational (next few real `/recap` runs) since this is a soft LLM instruction, not testable code.

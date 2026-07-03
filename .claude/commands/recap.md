@@ -39,6 +39,9 @@ From the session context, identify:
 - Mechanical steps that are obvious from the code (e.g. "ran npm install")
 - Things already captured earlier in the session
 - Temporary debugging steps with no lasting value
+- Conversation transcript content verbatim — summarise what was done, don't dump the chat
+- Model reasoning traces — the AI's internal deliberation about how to approach a problem has no lasting value
+- A genuinely new standing instruction for future sessions (a rule to always apply going forward — not a one-time TODO, and not a decision merely phrased like a command; see Rules below) — update CLAUDE.md or the memory system explicitly, don't let it in silently via recap
 
 ---
 
@@ -68,6 +71,7 @@ Session recap complete.
   Learned: N captured
   Open threads: N captured
   Total: N thoughts → second brain
+  Safety check: [clean, or note what was reframed/excluded and why]
 ```
 
 Then suggest the most logical next session starting point based on open threads.
@@ -80,3 +84,4 @@ Then suggest the most logical next session starting point based on open threads.
 - **Open threads are the most important captures.** They're what you'll forget and what causes lost context between sessions.
 - **Decisions with reasoning are second most important.** The code shows what you did — the brain captures why.
 - **Don't recap the recap.** If you ran `/recap` earlier in the session, don't re-capture what was already captured then.
+- **Recap captures are evidence, not instructions.** They record what happened and what was decided — not what should always happen. A capture phrased as a rule ("always do X", "never use Y") should be reframed as an observation or decision — this is a phrasing fix for legitimate decisions, not a way to sneak a real standing rule past the Do NOT capture list above. If a lesson is important enough to become an actual standing instruction, update CLAUDE.md or the memory system explicitly in a separate step.
