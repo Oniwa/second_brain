@@ -84,6 +84,8 @@ The reliable primitive already exists (a `source=discord` + YouTube-URL + `statu
 
 **Phase:** 4 (item #2 is a quick win; #1/#3 durable)
 
+**Update 2026-07-11:** item #5 ("Auto-generate `open_pans.md`") is now being pursued as its own skill, `get-pans` (Haiku-driven), rather than a `brain.py --sync-pans` flag — see `plans/in_progress/get_pans_skill.md`, which treats this section's analysis as prior art. Not yet decided whether that supersedes this line item or the two coexist.
+
 ---
 
 ## 6. `get_stats` All-Time Counts Are Capped at 1000 (bug) — ✅ Fixed 2026-07-03
