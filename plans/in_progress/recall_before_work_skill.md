@@ -28,11 +28,11 @@ This is because the brain is shared across *all* the user's projects, not scoped
 
 **Direct implication for this skill:** naive "recall relevant context at session start" is not just a wrong-guess-wastes-tokens problem (see Topic inference below) — without some notion of project/repo scope, it will *reliably* surface noise from whatever else the user has going on elsewhere (work Azure DevOps tickets, other personal projects), not just occasionally miss.
 
-**This skill is now blocked on `plans/in_progress/project_scoping_field.md`** — a new stub plan (2026-07-03) for a dedicated project-identity field on thoughts, which is the scoping mechanism this skill needs. That plan is deliberately scoped separately (it has independent value beyond this skill and touches schema/infra across multiple capture points) — see its "Why this is its own plan" section. Don't re-litigate the scoping-mechanism design here; resolve it there first.
+**Unblocked as of 2026-07-10** — `plans/done/project_scoping_field.md` is implemented and verified: `thoughts.workspace` exists, is derived automatically at capture time, and `semantic_search`/`list_recent`/`get_context`/`meeting_prep` all scope to `<current workspace> + global` by default (with a `workspace:"all"` override and a `scope:` header on every response). This skill can now build directly on that mechanism instead of designing its own scoping. One known caveat carried over: a handful of historical thoughts with generic `source` values (e.g. plain `mcp`) couldn't be backfilled to a workspace and will still appear in every scope — see that plan's "Known gap" note.
 
 ## Open questions for the real planning session
 
-- ~~Project/repo scoping~~ — moved to `project_scoping_field.md`, which this skill now depends on.
+- ~~Project/repo scoping~~ — resolved via `plans/done/project_scoping_field.md`'s `workspace` field, now implemented.
 - **Trigger:** manual slash command vs. some automatic hook at session start? A hook is more "recall before work" in spirit but has a much larger blast radius (runs unprompted every session).
 - **Topic inference:** how does it know what to recall context *for*, without an explicit query? Wrong guess = wasted tokens and noise the user has to skim past.
 - **Overlap with existing tools:** `get_context` and `meeting_prep` already exist and do on-demand retrieval well. Does this skill just wrap them with an auto-trigger, or does it need its own retrieval logic?

@@ -8,6 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
+import * as fs from "fs";
+import { execSync } from "child_process";
 
 // Load .env from project root (two levels up from mcp/src/)
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -56,12 +58,68 @@ function formatThought(t: Record<string, unknown>): string {
     t.urls && (t.urls as string[]).length
       ? `URLs: ${(t.urls as string[]).join(" ")}`
       : "",
-    `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}`,
+    `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}${t.workspace ? ` · Workspace: ${t.workspace}` : ""}`,
     t.similarity ? `Similarity: ${((t.similarity as number) * 100).toFixed(1)}%` : "",
     `ID: ${t.id}`,
   ];
   return lines.filter(Boolean).join("\n");
 }
+
+// ── Workspace scoping ───────────────────────────────────────────────────────────
+//
+// `workspace` records which project/repo a thought was captured while working in —
+// orthogonal to category='project' (which is about subject matter, not capture context).
+// See plans/done/project_scoping_field.md for the full design.
+
+const EXTERNAL_SOURCE_PATTERN = /^(youtube|substack|article|github|synthesis|danshapiro|simonwillison):/i;
+
+// Derives the current workspace from the MCP server process's cwd: a `.workspace`
+// override file at the git toplevel (for one logical project spanning multiple repos,
+// e.g. ABUCW) takes priority, then the git-toplevel directory basename, then the raw
+// cwd basename if git is unavailable. Returns null if nothing resolvable (honest —
+// callers fall back to unscoped "all" rather than silently guessing).
+function getCurrentWorkspace(): string | null {
+  try {
+    const toplevel = execSync("git rev-parse --show-toplevel", {
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+    const overridePath = path.join(toplevel, ".workspace");
+    if (fs.existsSync(overridePath)) {
+      const override = fs.readFileSync(overridePath, "utf-8").trim();
+      if (override) return override;
+    }
+    return path.basename(toplevel) || null;
+  } catch {
+    return path.basename(process.cwd()) || null;
+  }
+}
+
+// Capture-time workspace: external content (is_external, or a source that matches a
+// known external-source prefix — belt-and-suspenders since is_external is unreliable,
+// see the Known Bug note in project_scoping_field.md) always stays global (null), so a
+// /pan run never gets stamped with whatever repo it happened to run from.
+function deriveCaptureWorkspace(source: string, isExternal: boolean): string | null {
+  if (isExternal || EXTERNAL_SOURCE_PATTERN.test(source)) return null;
+  return getCurrentWorkspace();
+}
+
+// Resolves a query tool's effective scope: "all" (or an unresolvable current workspace)
+// disables filtering entirely; otherwise scope to <workspace> + global (null).
+function resolveScope(argWorkspace?: string): { scope: string; filterValue: string | null } {
+  if (argWorkspace === "all") return { scope: "all", filterValue: null };
+  const effective = argWorkspace ?? getCurrentWorkspace();
+  if (!effective) return { scope: "all", filterValue: null };
+  return { scope: effective, filterValue: effective };
+}
+
+function scopeHeader(scope: string): string {
+  return scope === "all" ? "scope: all" : `scope: ${scope} (+global)`;
+}
+
+const WORKSPACE_ARG_SCHEMA = {
+  type: "string",
+  description: "Scope to a workspace (default: current directory's workspace + global/unscoped thoughts). Pass \"all\" to search every workspace.",
+};
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
@@ -70,30 +128,36 @@ async function semanticSearch(args: {
   limit?: number;
   category?: string;
   status?: string;
+  workspace?: string;
 }): Promise<string> {
   const embedding = await generateEmbedding(args.query);
+  const { scope, filterValue } = resolveScope(args.workspace);
   const { data, error } = await supabase.rpc("semantic_search", {
     query_embedding: embedding,
     match_limit: args.limit ?? 10,
     filter_category: args.category ?? null,
     filter_status: args.status === "all" ? null : (args.status ?? "active"),
+    filter_workspace: filterValue,
   });
   if (error) throw new Error(`Search failed: ${error.message}`);
-  if (!data || data.length === 0) return "No matching thoughts found.";
-  return data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
+  const header = scopeHeader(scope);
+  if (!data || data.length === 0) return `${header}\n\nNo matching thoughts found.`;
+  return `${header}\n\n` + data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
 }
 
 async function listRecent(args: {
   days?: number;
   category?: string;
   status?: string;
+  workspace?: string;
 }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 7));
+  const { scope, filterValue } = resolveScope(args.workspace);
 
   let query = supabase
     .from("thoughts")
-    .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(50);
@@ -103,12 +167,14 @@ async function listRecent(args: {
   }
 
   if (args.category) query = query.eq("category", args.category);
+  if (filterValue) query = query.or(`workspace.eq.${filterValue},workspace.is.null`);
 
   const { data, error } = await query;
   if (error) throw new Error(`List failed: ${error.message}`);
+  const header = scopeHeader(scope);
   if (!data || data.length === 0)
-    return `No thoughts captured in the last ${args.days ?? 7} days.`;
-  return `${data.length} thought(s) in the last ${args.days ?? 7} days:\n\n` +
+    return `${header}\n\nNo thoughts captured in the last ${args.days ?? 7} days.`;
+  return `${header}\n\n${data.length} thought(s) in the last ${args.days ?? 7} days:\n\n` +
     data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
 }
 
@@ -117,13 +183,16 @@ async function captureThought(args: {
   source?: string;
   is_external?: boolean;
 }): Promise<string> {
+  const source = args.source ?? "mcp";
+  const is_external = args.is_external ?? false;
+  const workspace = deriveCaptureWorkspace(source, is_external);
   const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
     },
-    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp", is_external: args.is_external ?? false }),
+    body: JSON.stringify({ text: args.text, source, is_external, workspace }),
   });
   const data = await res.json();
   if (data.duplicate) {
@@ -303,8 +372,10 @@ async function deleteThought(args: { id: string }): Promise<string> {
 async function meetingPrep(args: {
   meeting: string;
   people?: string[];
+  workspace?: string;
 }): Promise<string> {
   const { meeting, people = [] } = args;
+  const { scope, filterValue } = resolveScope(args.workspace);
 
   const embedding = await generateEmbedding(meeting);
 
@@ -315,16 +386,19 @@ async function meetingPrep(args: {
       match_limit: 15,
       filter_category: null,
       filter_status: "active",
+      filter_workspace: filterValue,
     }),
-    ...people.map((person) =>
-      supabase
+    ...people.map((person) => {
+      let q = supabase
         .from("thoughts")
-        .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
+        .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
         .eq("status", "active")
         .contains("people", [person])
         .order("created_at", { ascending: false })
-        .limit(10)
-    ),
+        .limit(10);
+      if (filterValue) q = q.or(`workspace.eq.${filterValue},workspace.is.null`);
+      return q;
+    }),
   ]);
 
   if (semanticResult.error) throw new Error(`Search failed: ${semanticResult.error.message}`);
@@ -342,12 +416,13 @@ async function meetingPrep(args: {
     if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
   }
 
+  const header = scopeHeader(scope);
   if (merged.length === 0) {
-    return `No relevant context found for "${meeting}". Nothing captured about this yet.`;
+    return `${header}\n\nNo relevant context found for "${meeting}". Nothing captured about this yet.`;
   }
 
   const peopleLabel = people.length ? ` · people: ${people.join(", ")}` : "";
-  return `**Meeting prep context: "${meeting}"**${peopleLabel}\n(${merged.length} relevant thoughts)\n\n` +
+  return `${header}\n\n**Meeting prep context: "${meeting}"**${peopleLabel}\n(${merged.length} relevant thoughts)\n\n` +
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
 }
 
@@ -439,17 +514,22 @@ async function listWikiPages(args: { entity_type?: string }): Promise<string> {
   return [header, divider, ...rows].join("\n");
 }
 
-async function getContext(args: { topic: string }): Promise<string> {
+async function getContext(args: { topic: string; workspace?: string }): Promise<string> {
+  const { scope, filterValue } = resolveScope(args.workspace);
+
   // Combine semantic search + keyword match on topics array
+  let keywordQuery = supabase
+    .from("thoughts")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
+    .eq("status", "active")
+    .contains("topics", [args.topic])
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (filterValue) keywordQuery = keywordQuery.or(`workspace.eq.${filterValue},workspace.is.null`);
+
   const [embedding, keywordResult] = await Promise.all([
     generateEmbedding(args.topic),
-    supabase
-      .from("thoughts")
-      .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
-      .eq("status", "active")
-      .contains("topics", [args.topic])
-      .order("created_at", { ascending: false })
-      .limit(20),
+    keywordQuery,
   ]);
 
   const { data: semanticData, error: semErr } = await supabase.rpc("semantic_search", {
@@ -457,6 +537,7 @@ async function getContext(args: { topic: string }): Promise<string> {
     match_limit: 20,
     filter_category: null,
     filter_status: "active",
+    filter_workspace: filterValue,
   });
   if (semErr) throw new Error(`Context search failed: ${semErr.message}`);
 
@@ -470,8 +551,9 @@ async function getContext(args: { topic: string }): Promise<string> {
     if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
   }
 
-  if (merged.length === 0) return `No context found for "${args.topic}".`;
-  return `**Context for "${args.topic}"** (${merged.length} thoughts)\n\n` +
+  const header = scopeHeader(scope);
+  if (merged.length === 0) return `${header}\n\nNo context found for "${args.topic}".`;
+  return `${header}\n\n**Context for "${args.topic}"** (${merged.length} thoughts)\n\n` +
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
 }
 
@@ -502,6 +584,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["active", "archived", "all"],
             description: "Filter by status (default: active)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["query"],
       },
@@ -523,6 +606,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["active", "archived", "all"],
             description: "Filter by status (default: active)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
       },
     },
@@ -597,6 +681,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: "object",
         properties: {
           topic: { type: "string", description: "The topic to gather context on" },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["topic"],
       },
@@ -663,6 +748,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: "string" },
             description: "Names of people in the meeting to look up explicitly (optional but improves recall)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["meeting"],
       },

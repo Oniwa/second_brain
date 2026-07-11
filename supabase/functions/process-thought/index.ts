@@ -140,7 +140,7 @@ serve(async (req) => {
     });
   }
 
-  let body: { text: string; source?: string; id?: string; is_external?: boolean };
+  let body: { text: string; source?: string; id?: string; is_external?: boolean; workspace?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -150,7 +150,7 @@ serve(async (req) => {
     });
   }
 
-  const { text, source = "api", id, is_external = false } = body;
+  const { text, source = "api", id, is_external = false, workspace = null } = body;
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return new Response(JSON.stringify({ error: "text field is required" }), {
@@ -221,6 +221,7 @@ serve(async (req) => {
         content_hash: contentHash,
       };
       if (body.is_external !== undefined) updatePayload.is_external = is_external;
+      if (body.workspace !== undefined) updatePayload.workspace = workspace;
 
       const { data, error } = await supabase
         .from("thoughts")
@@ -298,6 +299,7 @@ serve(async (req) => {
         status,
         content_hash: contentHash,
         is_external,
+        workspace,
       })
       .select("id, title, category, confidence, status")
       .single();

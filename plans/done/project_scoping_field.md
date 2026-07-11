@@ -1,6 +1,6 @@
 # Project-Scoping Field for Thoughts (`workspace`) — Plan
 
-**Status:** designed — finalized via grill-me session 2026-07-08. Ready to implement. Supersedes the original 2026-07-03 stub (kept below under "Original motivation").
+**Status:** ✅ implemented and verified 2026-07-10. Supersedes the original 2026-07-03 stub (kept below under "Original motivation").
 
 ---
 
@@ -96,12 +96,22 @@ Plus (one-time, per work repo): add a `.workspace` file to each ABU repo contain
 
 ## Verification
 
-- `007` applied: `workspace` column exists, nullable, indexed.
-- Backfill counts match exactly: `agile_backlog_builder`=19, `abucw`=18, `idea_center_ai_policy`=6; the 13 Substack rows remain `null`.
-- A capture from inside `second_brain` lands `workspace='second_brain'`; a `/pan` from the same repo lands `workspace=null` (external gate).
-- A capture from an ABU repo carrying `.workspace=abucw` lands `workspace='abucw'`.
-- `semantic_search`/`list_recent` from `second_brain` return second_brain + null rows only, with a `scope: second_brain (+global)` header; `workspace:"all"` returns everything with `scope: all`.
-- No external/pan row is ever stamped with a non-null workspace.
+- `007` applied: `workspace` column exists, nullable, indexed. ✅
+- Backfill counts: `agile_backlog_builder`=19, `abucw`=18, `idea_center_ai_policy`=**21** (not 6 — see Implementation Notes below), 13 Substack rows remain `null`. ✅ verified via `execute_sql` `GROUP BY workspace`.
+- A capture from inside `second_brain` lands `workspace='second_brain'`. ✅ verified live: captured a test thought, confirmed `workspace: "second_brain"` via direct query, archived it.
+- `semantic_search`/`list_recent`/`get_context`/`meeting_prep` from `second_brain` return second_brain + null rows only, with a `scope: second_brain (+global)` header; `workspace:"all"` returns everything with `scope: all`. ✅ verified all four tools live — confirmed properly-tagged `agile_backlog_builder` rows are excluded from the scoped view and only appear under `workspace:"all"`.
+- No external/pan row is ever stamped with a non-null workspace. ✅ consistent with backfill results (13 external rows untouched).
+- A capture from an ABU repo carrying `.workspace=abucw` lands `workspace='abucw'` — **not yet verified**, no ABU repo has the `.workspace` override file yet (separate one-time action, see Implementation Notes).
+
+## Implementation notes (2026-07-10)
+
+**Backfill count deviation — `idea_center_ai_policy` = 21, not 6.** The plan's 6-row count was verified against the 2026-07-08 DB snapshot. By 2026-07-10, 15 more rows had landed with the workspace slug literally in `source` (`recap: idea_center_ai_policy session 2026-07-10...`) — deliberately tagged that way by the user's own recap run that day specifically to ease this backfill. Extended the migration to catch them (confirmed with the user before running). See `supabase/migrations/007_workspace.sql` for the exact predicates (all reconstructed from live `source` values, not guessed — see that file's comments for the full reasoning per workspace).
+
+**Known gap — untaggable historical rows leak across all scopes.** Several ABU/`agile_backlog_builder`-related thoughts from 2026-07-06–08 have `source: "mcp"` (generic, no project marker) and were correctly left `null` by the backfill (no identifiable predicate to match). Since `null` is "always eligible in every scope," these still appear in every workspace's scoped view — e.g. a `second_brain`-scoped `semantic_search` for "Azure DevOps flow logging" still surfaces a few `mcp`-sourced ABU rows alongside genuinely global content. This is not a bug in the filtering logic (confirmed correct behavior for properly-tagged rows) — it's an inherent limit of a backfill scoped to *identifiable* source strings only. Options if this becomes annoying: a manual retroactive-tagging pass on the remaining generic-source rows, or just let them age out of relevance-ordered/recency-ordered results over time. Not blocking — not addressed further in this pass.
+
+**Deferred, not yet done:**
+- `scripts/brain.py` `--search`/`--recent` scoping (touch point 6 — the plan marked this lower priority, "can follow the MCP change")
+- `.workspace=abucw` files in the ABU repos (one-time action outside this repo, needs doing on the work machine)
 
 ---
 
