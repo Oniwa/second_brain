@@ -1,36 +1,27 @@
 # Open Pans
 
-Sources saved to the second brain to "pan for gold" but not yet processed. Check off each item once it has been panned and captured.
+Sources saved to the second brain to "pan for gold" but not yet processed. Check off each item once it has been panned and captured — or just re-run `/get_pans` afterward and it'll drop off automatically.
 
-_Last synced from database: 2026-07-01 (direct PostgREST query on source=discord — the MCP search tools miss these)_
+_Last synced from database: 2026-07-11 (via `brain.py --pending-pans`)_
 
-## Explicit "pan for gold" items
+## Open pans
 
-- [x] Pan for gold — https://youtu.be/z73yuF14udI (saved 6/15, due end of June) — `10326597-0981-4c53-b4c3-c9a5b2d3fa78` — already fully panned 6/19 (~17 thoughts under "Opus 4.8 scored 81 in my benchmark"); promptkit URL already captured in `7db32d9f`; reminder archived
-- [x] Pan video for gold — https://youtu.be/C2Izj7hxIlE (saved 6/14, due end of June) — `7951c7d0-fca2-4580-acda-5d8410865991` — already fully panned 6/22 (12 thoughts under "Simon Scrapes - Claude Code Masterclass for People Who Don't Code"); reminder archived 7/1
-- [x] Pan video for gold — https://youtu.be/mNawxNjrR_E (saved 6/12, due end of June) — `ad460fc5-6b37-4f54-b6c3-9f23d91ccee1` — already fully panned 6/22 (8 thoughts under "Simon Scrapes - 14 GENIUS Ways to Give Claude Code SUPERPOWERS"); reminder archived 7/1
-- [x] Review & compact gold handling video — https://youtu.be/dtAJ2dOd3ko (saved 6/11, due June 30) — `12f15817-61db-45f8-9b02-7a5e28d2333d` — already fully panned 6/19 (9 thoughts under "Matt Pocock - /handoff is my new favourite skill"); reminder archived 7/1
-
-## Recent discord submissions (since 6/18) — newly reconciled 7/1
-
-These were submitted to #sb-inbox but were missing from this tracker (semantic_search/list_recent couldn't enumerate them). Verified via direct DB query — 11 total since 6/18: 9 open below, 2 already handled (EPEI-IIPu4E archived 6/22; CBcyKfpldTo panned & archived 7/1).
-
-- [x] Pan for gold — https://youtu.be/BOXK2XFLA-E (6/18, due end of June) — Nate B. Jones "Don't build more AI agents until you watch this" (engineering panic) — `39d0e402-ee3f-4ed9-baa9-1595cdcd8b65` — already fully panned 6/23 (20 thoughts under "substack: Nate B. Jones - Vercel deleted 80% of its agent's tools and the agent got better"); reminder archived 7/1
-- [x] Pan for gold — https://youtu.be/F4At4St1iH8 (6/21, due end of June) — Simon Scrapes "Claude Code Agentic OS... It Remembers Everything" (long-term memory; relevant to second brain) — `174e832a-8d84-49a8-ba30-f2d20b42ff67` — already fully panned (9 thoughts under same title); reminder archived 7/1
-- [x] Pan for gold — https://youtu.be/9PUaEj0pMYE (6/21, due end of June) — Nate B. Jones "Your AI Skills Are Trapped | Here's How to Own Them" (AI agents locked to one place) — `7cc538c6-a0b4-483c-bbf6-172fde5c064e` — already fully panned (17 thoughts under "substack: Nate B. Jones - Your skills are leaving your hands"); reminder archived 7/1
-- [x] Pan for gold — https://youtu.be/rh_PcL26zls (6/21, due end of June) — Nate B. Jones "Most Teams Skip This Critical AI Agent Skill in 2026" (agent ownership/accountability) — `ec8d3631-738e-48fd-8055-be4a6f92e59a` — already fully panned (13 thoughts under "Nate B. Jones - You Can't Run AI Agents Without This"); reminder archived 7/1
-- [x] Pan for gold — https://youtu.be/nQwJVHCtDDY (6/21, due end of June) — David Ondrej "Matt Pocock's Agentic Engineering Workflow (just copy him)" — `bc0bb5bc-383e-4fc9-8f1e-412ce9f10bbe` — already fully panned (19 thoughts under same title); reminder archived 7/1
-- [x] Pan for gold — https://youtu.be/A4zMyjkL0Dc (6/25, due end of week) — Nate B. Jones "I Stopped Prompting AI One Task At A Time. This Works Better." (AI loops / new prompting) — `ea990811-cc99-47eb-8936-b4efa5093025` — panned 7/2 (genuinely unpanned; dual YouTube+Substack "AI Loop Managers" + Prompt Kit; 11 thoughts captured: prompt/loop/loop-of-loops taxonomy, work-lives-between-apps/integration-layer, agents-as-loop-managers + demo-test, beyond-briefing hidden-loop-around-prompt, good-vs-bad agent questions, automation-must-fit-current-state, the-five-questions, single-loop-vs-loop-of-loops delegation, Mary-Poppins stack + attention layer, low-stakes-first-loop, Prompt Kit reference w/ Loop Spec format); reminder archived
-- [x] Pan for gold — https://youtu.be/mjTgkm-h__M (6/25, due end of week) — Sandeep Swadia "How To Think SO CLEARLY People Assume You're A Genius" (systems thinking) — `85227de9-b443-4360-b15a-fa81bd1dedc4` — panned 7/1 (voice-to-text mis-transcribed "pan" as "pin"; genuinely unpanned — 9 new systems-thinking insights captured: Cynefin four-types, DART, cobra effect, delayed feedback, M&M's heuristic, train-platform, etc.); reminder archived
-- [x] Pan for gold — https://youtu.be/b4d32pBa3UY (6/26, due end of week) — Dan Martell "This AI System Will Make You So Smart It's Almost Unfair" (second brain system) — `204425d0-2d9c-436d-b299-5bb3c033540f` — panned 7/1 (genuinely unpanned; 10 thoughts captured: install-the-brain, 3-file identity (user/soul/identity.md), structure→60%→85% accuracy, 7-folder vault, MOCs, synthesize-don't-hoard, Granola meeting-extraction prompt, overnight compounding, nightly refine cron, + hybrid embeddings/files contrast); reminder archived
-- [x] Pan for gold — https://youtu.be/Zp8lr6IzUnQ (6/29, due end of next week) — Nate B. Jones "GLM 5.2 Is Free And Beats Claude On Most Work" (free local vs frontier models) — `511f9a42-598e-4712-bdaa-5b4f02d1178b` — panned 7/2 (genuinely unpanned; dual YouTube+Substack "Cheap Intelligence Won't Matter If Your Context Is Trapped"; 7 thoughts captured: center-vs-edge distribution model selection, switching=rebuild-whole-harness (Lindy/DeepSeek migration cost), context-lock-in / firm's-brain-on-rent, last-mile talent scarcity = builder opportunity, auto-routing frontier-vs-cheap investment theme, Claude Tag team-harness stickiness, leader diagnostic questions + seven-questions substack ref); reminder archived
-
-## Review / extract-insights items
-
-- [x] Review & extract insights from video — https://youtu.be/5H-s-TIO0QE (saved 6/14, due end of June) — `214121b4-a804-4d6a-a2a0-ead736142458` — already panned 6/22 (8 thoughts); reminder archived 7/1
-- [x] Review video prompts + Substack — https://youtu.be/UsCgEuIAclE (saved 6/2, due June 15) — `88b5d948-be07-4d38-878b-a590763411b4` — already fully panned 6/18 (14 thoughts under "Executive Briefing: Your career evidence is thinner than you think"); nothing new; reminder archived
-- [x] Review pod code efficiency video — https://youtu.be/CBcyKfpldTo (saved 6/25, due end of week) — `a878548d-4783-4be9-8bf6-2091a4d70228` — panned 7/1 (Simon Scrapes "Watch This If You're Serious About Claude Code" — genuinely unpanned; 6 new insights captured); reminder archived
-- [x] Token burn dashboard (watch video) — https://youtu.be/l8BloTSLK6M (saved 6/15, due end of June) — `ba642d54-9605-482c-b11b-0fe5f3cbb304` — already panned 6/22 (Token Burn Dashboard); reminder archived
-- [x] Review AI logging best practices — https://youtu.be/n0nC1kmztSk (saved 5/28, due June 10) — `baaac304-2ead-410f-b2fe-b6ef6b0a38d3` — already panned 6/18 (agent product analytics / "dashboard is green"); promptkit added `3a9789d3`; reminder archived
-- [x] File system setup for AI workflows (+Substack) — https://youtu.be/ltbzgzZZmgI (saved 5/27) — `03c7692a-1195-4b5e-9ac5-f0e7b684ec9d` — already panned 6/18 (Build the room before you write the memo); reminder archived
-- [x] Review video implementation layer — https://youtu.be/jwtpMSRAPAQ (saved 5/16) — `364104de-f638-4b7f-8a9c-2e24487be254` — panned 7/1; ~85% already captured 6/18 (Trillion Dollar Agentic Workflow / implementation layer), 1 new insight added `ae44a00b`
+- [ ] https://youtu.be/ogTLWGBc3cE?si=5BxlwJ-LD9ZZr0Uu — Review video on new prompting methodology (saved 5/27, due 6/7/26) — `32d4e0c6-a0da-48ab-911f-0d28cd9106fd`
+- [ ] https://youtu.be/1dYp9ymqy_g?si=i23oRSI0LnH0o608 — Review second brains video and payment deadline (saved 6/4, due 6/20/26) — `e8561a90-4e02-413a-9d55-da50260f640e`
+- [ ] https://youtu.be/lq2fP7wC7d8?is=GTSwc-LzHPQKAJPt — Review AI model selection video resource (saved 7/3, due July 10th) — `0746c24b-3248-47ab-a897-e83276f1d794`
+- [ ] https://youtu.be/W6aOdLlEz1w?is=RORO6aJ6txJfa0n6 — Review AI-human loop engineering workflow video (saved 7/3, due July 10th) — `abaacb18-293b-4111-bb7e-1de959187120`
+- [ ] https://youtu.be/1a1VXDdIyrk?is=onjoyZoR9_jFTX0k — Review harness engineering video by July 10 (saved 7/3, due July 10th) — `245adc04-f039-4d5f-8b32-a25abc4dc0b3`
+- [ ] https://youtu.be/rBhAVL4tz14?is=t8djFbZTwf3y4Xos — Review AI careers video for key insights (saved 7/3, due July 10th) — `8987d1eb-dbb1-4fed-9255-68b5ff37b5e0`
+- [ ] https://youtu.be/1cSNE-ZkDLQ?is=LrxTZ7GUxq4claau — Review video on imagination in AI (saved 7/5, due July 10th) — `9f7eb651-cadf-4a41-b4b7-66c0e88c408e`
+- [ ] https://youtu.be/UNzCG3lw6O0?is=P9paqMM9Gan56jSA — Review video on writing skills for AI age (saved 7/6, due July 10th) — `4c714f61-00a1-4323-8361-fb9219eaf9d7`
+- [ ] https://youtu.be/DTCyvo6cC54?is=RhziBQ1cu0Z2H5q9 — Review second brains video for relevant concepts (saved 7/6, due July 10th) — `7339a478-6f84-4f86-a278-9dcf922d34b8`
+- [ ] https://youtu.be/QSK4vf_ZTRA?is=w2KgNhJ-2wpMwKdR — Review open engine AI agent handoff video (saved 7/8, due July 10th) — `9116068e-ea4b-45c7-bec0-d5c398b9f858`
+- [ ] https://youtu.be/suY66oTDn0s?is=eMohLBYp-_fQVZ9E — Multi-agent self-checking system research (saved 7/10, due July 10th) — `2f0b8480-66fa-48e8-9b97-058338d2d2a0`
+- [ ] https://youtu.be/EJyuu6zlQCg?si=ibkoofMtrYLDL_eN — Copilot CLI skills enhancement from video (saved 3/19) — `4c312f1e-b8c6-4ed1-8c47-28b6266ded66`
+- [ ] https://www.aihero.dev/5-agent-skills-i-use-every-day — AI Hero Agent Skills Reference Files (saved 3/19) — `35139591-2104-4876-a57d-6bbdc1a11c8c`
+- [ ] https://youtu.be/-u_igSQHAIo?si=Ib8g60mQtHCg0QNV — Claude code skills framework seven levels (saved 3/19) — `11f8a69a-ed10-4512-a9c9-f13f6dfea43a`
+- [ ] https://www.xda-developers.com/set-up-claude-code-like-boris-cherny/ — Read Claude Code setup guide by Boris Cherny (saved 3/20) — `888c5f47-4d06-409f-809b-c652bb7d45cb`
+- [ ] https://youtu.be/rmOFxbdY4oU?si=zuGTbBhvArm9F7gD — Skill audit methodology for AI selection (saved 3/25) — `3d6dfbe2-550b-4618-9c6d-19d4428b4478`
+- [ ] https://youtu.be/LIkYVsxMpS8?si=g22i4sKsqJD9VDX3 — AI project selection decision framework (saved 5/17) — `36327525-195e-41ab-aa96-938755f90820`
+- [ ] https://thenewstack.io/why-cicd-fails-llms/ — LLM CI/CD Failures Analysis and Insights (saved 7/3) — `da5dbc97-b5a4-4183-a504-2f3b62b0b71e`
+- [ ] https://youtu.be/5mfwXuS06Ok?is=vkZdPHb8X2nbNpUU — Critical thinking video resource (saved 7/6) — `15ee4beb-e044-4f2d-b4ad-5e628627c384`

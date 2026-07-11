@@ -1,7 +1,7 @@
 # Current Work
 
 ## Active
-**Nothing in flight.** `get_stats`, the recap safety rules, the recap CURRENT.md drift-check, and the `workspace` project-scoping field were just shipped (see Recently Shipped) — pick the next item from Up Next below.
+**Nothing in flight.** `get_stats`, the recap safety rules, the recap CURRENT.md drift-check, the `workspace` project-scoping field, and the `get_pans` skill were just shipped (see Recently Shipped) — pick the next item from Up Next below.
 
 ---
 
@@ -9,7 +9,7 @@
 
 ### Proven bugs (highest priority — `plans/in_progress/mcp_improvements.md`)
 - **`find_by_url` tool missing** — no way to look up a thought by URL; root cause of repeated pan-dedup false negatives (several videos looked "unpanned" on URL search when they'd already been fully panned). §4
-- **Pan queue visibility** — Discord pan submissions are invisible to `semantic_search`/`list_recent`; quick win is `--pending-pans` / `!pans` (§5, item 2), durable fix is a first-class `pan_status` (§5, item 1)
+- **Pan queue visibility, remainder** — §5 item 2's `--pending-pans` shipped 2026-07-11 as part of `get_pans`; the Discord `!pans` half and item #1's first-class `pan_status` field remain open
 
 ### Skill-only edits — no code, just `.md` files
 - **`pan_skill_improvements.md`** → edit `.claude/commands/pan.md`: A1 intra-batch overlap check, A2 delete fetched transcript after pan, B1 make trims+merges proactive in Phase 2.5, B2 lower overlap floor 65%→~55% (real near-dups this week landed at 55–64%, invisible to the current threshold). A3 (creator-saturation nudge) was explicitly rejected — dense Nate B. Jones coverage is deliberate curation, not bloat.
@@ -26,9 +26,6 @@
 - **Decide cron location** — Pi vs PC vs on-demand; blocks scheduling weekly wiki recompile
 - **Dashboard item 11 — inline `raw_text` edit in `audit.html`** — no longer blocked (Edge Function update-mode shipped 5/05); just needs the Phase 2 UI (`plans/in_progress/dashboard_audit_plan.md`)
 
-### Designed & ready to implement
-- **`get_pans_skill.md`** — **designed 2026-07-11 via grill-me.** Haiku-driven skill (`get_pans`, snake_case — new naming convention for skills going forward) that auto-populates `open_pans.md` from the second brain, replacing manual reconciliation. `brain.py --pending-pans` (§5 item #2, superseding item #5) runs the deterministic structural query (`source=discord` + has URL + `status=active`) — confirmed via live ground-truth review that this query alone is the complete, correct answer, no intent-classification step needed; Haiku's only job is date-parsing + formatting. Pure regeneration each run, no historical preservation (git + the DB itself are the real audit trail). Ground-truth baseline recorded in the plan — 19 genuine open pans as of 2026-07-11 — as the actual implementation-verification target.
-
 ### Needs more design before implementing
 - **`compile_wiki_pagination_bug.md`** (new stub) — same 1000-row PostgREST silent-cap bug as `get_stats`, now found in `compile_wiki.py` (`get_qualifying_projects` confirmed broken; `get_distinct_topics`/`get_distinct_people`/`fetch_thoughts_for_project` likely also undercounting). Bigger than the original "fix the JSON" task — needs a grill-me pass to scope (shared pagination helper vs. per-site fix, which of the 9 call sites to fix now vs. defer)
 - **`digest_backlog_filter.md`** — recap-sourced open threads keep getting promoted to Top 3 actions; fix sketch exists (stamp `source: "recap"`, add `[BACKLOG]` bucket) but marker choice / promotion path / retroactive backfill are undecided
@@ -42,6 +39,7 @@
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-07-11 | `get_pans` skill | Haiku-driven skill (snake_case naming, new convention) that regenerates `open_pans.md` from the live brain — replaces manual reconciliation. `brain.py --pending-pans` runs the deterministic structural query (`source=discord` + has URL + `status=active`); confirmed via ground-truth review that this alone is the complete, correct set (no intent-classification needed — an initial attempt to exclude "generic-sounding" saves was wrong on review). Verified exact match against a hand-built 19-item baseline. `disable-model-invocation: true` so it only runs on explicit `/get_pans`, not autonomously. `plans/done/get_pans_skill.md`; supersedes/completes `mcp_improvements.md` §5 items #2 and #5 |
 | 2026-07-10 | `workspace` project-scoping field | Nullable `thoughts.workspace` column (migration `007`), derived client-side at capture time (external-gate → `.workspace` override file → git-toplevel basename → cwd basename → null) in MCP `captureThought` — covers direct captures + `/recap` + `/pan` for free, both call the same function. All 4 MCP query tools (`semantic_search`, `list_recent`, `get_context`, `meeting_prep`) now scope to `<current> + global` by default with a `workspace:"all"` override and a `scope:` header; `semantic_search` RPC extended (migration `008`). Backfill: `agile_backlog_builder`=19, `abucw`=18, `idea_center_ai_policy`=21 (extended from the plan's original 6 — see plan for reasoning). Verified live end-to-end. `plans/done/project_scoping_field.md` |
 | 2026-07-03 | Recap CURRENT.md drift check | Step 4 added to `recap.md`: compares CURRENT.md's Active/Up Next against session git history, flags a specific mismatch as a question, never auto-edits — flag-only by design |
 | 2026-07-03 | Global skill portability | `grill-me.md` added to repo as canonical source (was global-only, Opus 4.8); stale global `pan.md` and `meal_planner`'s outdated `grill-me.md` reconciled; `cross_tool_skill_sync.md` stub written for Claude Code + Copilot CLI sync across Linux/Windows (design not finalized — see Up Next) |
@@ -65,6 +63,7 @@
 - Pan skill plan: `plans/in_progress/pan_skill_improvements.md`
 - Recap skill plan (done): `plans/done/recap_skill_improvements.md` · follow-up stub: `plans/in_progress/recall_before_work_skill.md`
 - Workspace field plan (done): `plans/done/project_scoping_field.md`
+- `get_pans` skill plan (done): `plans/done/get_pans_skill.md`
 - Digest backlog filter: `plans/in_progress/digest_backlog_filter.md`
 - OB1 comparison / backlog stubs: `plans/in_progress/open_brain_improvements.md`
 - Pan queue tracker: `open_pans.md`

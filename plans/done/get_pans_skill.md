@@ -1,6 +1,8 @@
 # `get_pans` Skill — Plan
 
-**Status:** designed — finalized via grill-me session 2026-07-11. Ready to implement. (Working title was `get-pans`; renamed during grill-me — see Decision 7.)
+**Status:** ✅ implemented and verified 2026-07-11. (Working title was `get-pans`; renamed during grill-me — see Decision 7.)
+
+**Resolution:** `scripts/brain.py --pending-pans` built exactly per Decision 2, verified to match the ground-truth baseline exactly (19/19 IDs). `.claude/commands/get_pans.md` built and run end-to-end — regenerated `open_pans.md` correctly (sorted per Decision 4, clean line-ending diff per Decision 3). Two refinements added post-grill-me at implementation time, not previously decided: (1) each line now includes a short topic description (the `title` field) alongside the URL/dates/ID; (2) frontmatter got `disable-model-invocation: true` so the skill doesn't consume context during autonomous work — only invocable by the user typing `/get_pans` directly.
 
 ---
 

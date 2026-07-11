@@ -8,6 +8,7 @@ Usage:
   python brain.py --recent [--days 7] [--category project]
   python brain.py --search "what you want to find" [--category idea]
   python brain.py --stats [--days 30]
+  python brain.py --pending-pans
 """
 
 import argparse
@@ -135,6 +136,33 @@ def search(env: dict, query: str, limit: int = 10, category: str | None = None) 
         _print_thought(t, similarity=similarity)
 
 
+def pending_pans(env: dict) -> None:
+    """Print the open "pan for gold" candidate set as JSON.
+
+    Structural filter only (source=discord, status=active, has at least one URL) —
+    this is the complete, correct definition, confirmed against ground truth in
+    plans/in_progress/get_pans_skill.md. No intent classification: any saved-but-
+    unreviewed URL is a legitimate candidate regardless of how it was phrased.
+
+    Machine-consumed (by the get_pans skill via Bash), so this prints JSON rather
+    than the human-readable format the other subcommands use.
+    """
+    params = {
+        "select": "id,title,raw_text,urls,created_at",
+        "source": "eq.discord",
+        "status": "eq.active",
+        "order": "created_at.asc",
+    }
+    url = f"{env['SUPABASE_URL']}/rest/v1/thoughts?{urllib.parse.urlencode(params)}"
+    headers = {
+        "apikey": env["SUPABASE_SERVICE_ROLE_KEY"],
+        "Authorization": f"Bearer {env['SUPABASE_SERVICE_ROLE_KEY']}",
+    }
+    results = api_request(url, headers=headers)
+    pending = [t for t in results if t.get("urls")]
+    print(json.dumps(pending, indent=2))
+
+
 def stats(env: dict, days: int = 30) -> None:
     import datetime
     since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat()
@@ -204,6 +232,11 @@ def main() -> None:
     parser.add_argument("--recent", action="store_true", help="List recent thoughts")
     parser.add_argument("--search", metavar="QUERY", help="Semantic search")
     parser.add_argument("--stats", action="store_true", help="Show brain stats")
+    parser.add_argument(
+        "--pending-pans",
+        action="store_true",
+        help="List open 'pan for gold' candidates as JSON (discord-sourced, active, has a URL)",
+    )
     parser.add_argument("--days", type=int, default=7, help="Days to look back (default: 7)")
     parser.add_argument("--limit", type=int, default=10, help="Max search results (default: 10)")
     parser.add_argument(
@@ -277,6 +310,8 @@ def main() -> None:
         search(env, args.search, limit=args.limit, category=args.category)
     elif args.stats:
         stats(env, days=args.days if args.days != 7 else 30)
+    elif args.pending_pans:
+        pending_pans(env)
     else:
         parser.print_help()
 

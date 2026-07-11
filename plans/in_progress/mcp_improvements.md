@@ -73,18 +73,18 @@ The reliable primitive already exists (a `source=discord` + YouTube-URL + `statu
 **Fixes, ranked by leverage ÷ effort:**
 
 1. **First-class pan type at capture time** *(structural root fix)* — In `process-thought`/`discord/bot.py`, when a Discord message has a YouTube URL + pan intent ("pan/review this video for gold"), tag it `category=pan_queue` (or add a `pan_status: open` field). Turns an invisible thought into a queryable queue item, robust even for CLI-submitted or oddly-worded pans. Requires a small classification-prompt/schema tweak.
-2. **`brain.py --pending-pans` + Discord `!pans` command** *(instant on-demand visibility, ~20 lines, works today with no schema change)* — Runs the `source=discord` + YouTube-URL + `status=active` query and lists open pans oldest-first with age. Reliable primitive; overlaps with `find_by_url` (#4) infrastructure.
+2. **`brain.py --pending-pans` + Discord `!pans` command** — ✅ **`--pending-pans` shipped 2026-07-11** as part of `get_pans_skill.md` (see Update below); the Discord `!pans` half is not built. Reliable primitive; overlaps with `find_by_url` (#4) infrastructure.
 3. **Dedicated "🎬 Open pans (N)" section in the daily/weekly digest** *(passive recurring visibility)* — The digest (`generate-digest` edge fn + `discord/digest.py`) already lands in Discord DM + Gmail. Add a section listing open pans and the oldest age. They can't rot unseen if every digest shows the backlog.
 4. **Pan-aware nudge** *(escalation)* — Extend `scripts/nudge.py`: if open pans exceed N or age past a threshold, DM "9 videos waiting to pan, oldest 13 days." Turns silence into an actionable backlog alert.
-5. **Auto-generate `open_pans.md`** *(kills tracker drift — the root of the 2026-07-01 mess)* — `brain.py --sync-pans` writes the tracker from the DB instead of hand-editing, so it never falls out of sync again.
+5. **Auto-generate `open_pans.md`** — ✅ **Shipped 2026-07-11**, superseded by the `get_pans` skill (see Update below) rather than a bare `brain.py --sync-pans` flag.
 
-**Recommended sequencing:** #2 first (immediate relief, no schema change), then #1 + #3 as the durable fix, with #4/#5 as cheap add-ons once the query helper exists.
+**Recommended sequencing:** ~~#2 first~~ done; #1 + #3 remain as the durable fix, with #4 as a cheap add-on once the query helper exists (it already does, via `--pending-pans`).
 
 **Relationship to #4:** Both stem from the same root — URLs and task-state are not first-class in retrieval. `find_by_url` (#4) fixes *dedup lookups*; this item fixes *backlog enumeration/visibility*. They can share a canonical-URL normalization helper and the same PostgREST query layer.
 
-**Phase:** 4 (item #2 is a quick win; #1/#3 durable)
+**Phase:** 4 (item #2 ✅ shipped; #1/#3 still durable/open)
 
-**Update 2026-07-11:** item #5 ("Auto-generate `open_pans.md`") is now being pursued as its own skill, `get-pans` (Haiku-driven), rather than a `brain.py --sync-pans` flag — see `plans/in_progress/get_pans_skill.md`, which treats this section's analysis as prior art. Not yet decided whether that supersedes this line item or the two coexist.
+**Update 2026-07-11 — resolved and shipped.** Items #2 and #5 were built together as the `get_pans` skill (`.claude/commands/get_pans.md`, Haiku-driven, `disable-model-invocation: true`) plus `scripts/brain.py --pending-pans` as its deterministic backend — see `plans/done/get_pans_skill.md`. Confirmed during implementation: `get_pans` fully supersedes item #5's original `--sync-pans` idea (same feature, built as a skill instead of a bare flag); item #2's structural query is exactly `--pending-pans`, though the Discord `!pans` half of item #2 was not built. Ground-truthed against the live DB (19 open pans, verified exact match) before shipping. Items #1 (first-class `pan_status` at capture time) and #3 (digest section) remain open.
 
 ---
 
