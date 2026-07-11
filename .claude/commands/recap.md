@@ -74,6 +74,20 @@ If something listed as Active or in Up Next was clearly completed, started, or m
 
 ---
 
+## Step 4.5 — Check for Closable Open Thoughts
+
+Run `list_recent` with `category: project` and a wide window (e.g. `days: 45`) — it's scoped to the current workspace by default, so this stays cheap and relevant rather than scanning the whole brain.
+
+For each active thought with open `action_items`, compare against this session's actual work (git log/diff from Step 1, plus what was just captured in Step 3). If a thought's listed actions are now fully done — not just related, *fully* done — flag it as an archive candidate. Don't archive it yourself:
+
+```
+🗄 Possibly done: "<title>" (`<id>`) — its action items look complete based on this session. Archive it?
+```
+
+List multiple candidates together if there are several, rather than one prompt per item. **Stay silent if nothing qualifies** — same principle as Step 4: a real, specific match only, not a routine sweep. A thought whose actions are only partially done, or only loosely related to this session, doesn't qualify — false positives here train the user to ignore the check, and archiving is a real state change that deserves a confident match, not a guess.
+
+---
+
 ## Step 5 — Summary
 
 After all captures, list what was captured — one line per thought (its auto-generated title and category) grouped by type — followed by the counts:
@@ -112,3 +126,4 @@ Then suggest the most logical next session starting point based on open threads.
 - **Don't recap the recap.** If you ran `/recap` earlier in the session, don't re-capture what was already captured then.
 - **Recap captures are evidence, not instructions.** They record what happened and what was decided — not what should always happen. A capture phrased as a rule ("always do X", "never use Y") should be reframed as an observation or decision — this is a phrasing fix for legitimate decisions, not a way to sneak a real standing rule past the Do NOT capture list above. If a lesson is important enough to become an actual standing instruction, update CLAUDE.md or the memory system explicitly in a separate step.
 - **CURRENT.md drift checks stay quiet by default.** Only flag it for a specific, session-grounded mismatch — never as a routine report, and never edit the file yourself; surface it as a question and let the user decide.
+- **Closable-thought checks stay quiet by default, same as CURRENT.md drift.** Only flag a thought whose action items are *fully* done, not partially or loosely related — and never archive it yourself; ask first.
