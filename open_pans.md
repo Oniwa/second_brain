@@ -6,9 +6,9 @@ _Last synced from database: 2026-07-11 (via `brain.py --pending-pans`)_
 
 ## Open pans
 
-- [ ] https://youtu.be/ogTLWGBc3cE?si=5BxlwJ-LD9ZZr0Uu — Review video on new prompting methodology (saved 5/27, due 6/7/26) — `32d4e0c6-a0da-48ab-911f-0d28cd9106fd`
-- [ ] https://youtu.be/1dYp9ymqy_g?si=i23oRSI0LnH0o608 — Review second brains video and payment deadline (saved 6/4, due 6/20/26) — `e8561a90-4e02-413a-9d55-da50260f640e`
-- [ ] https://youtu.be/lq2fP7wC7d8?is=GTSwc-LzHPQKAJPt — Review AI model selection video resource (saved 7/3, due July 10th) — `0746c24b-3248-47ab-a897-e83276f1d794`
+- [x] https://youtu.be/ogTLWGBc3cE?si=5BxlwJ-LD9ZZr0Uu — Review video on new prompting methodology (saved 5/27, due 6/7/26) — `32d4e0c6-a0da-48ab-911f-0d28cd9106fd` — already fully panned 6/18 (7 thoughts + promptkit ref under "68% of AI power users do one thing differently"); reminder archived 7/11
+- [x] https://youtu.be/1dYp9ymqy_g?si=i23oRSI0LnH0o608 — Review second brains video and payment deadline (saved 6/4, due 6/20/26) — `e8561a90-4e02-413a-9d55-da50260f640e` — already fully panned 6/18 (5 thoughts under "Dan Blumberg - It's cognitive uploading"); reminder archived 7/12
+- [x] https://youtu.be/lq2fP7wC7d8?is=GTSwc-LzHPQKAJPt — Review AI model selection video resource (saved 7/3, due July 10th) — `0746c24b-3248-47ab-a897-e83276f1d794` — panned 7/12 (9 thoughts + promptkit ref under "Which AI Should You Open First?"); reminder archived
 - [ ] https://youtu.be/W6aOdLlEz1w?is=RORO6aJ6txJfa0n6 — Review AI-human loop engineering workflow video (saved 7/3, due July 10th) — `abaacb18-293b-4111-bb7e-1de959187120`
 - [ ] https://youtu.be/1a1VXDdIyrk?is=onjoyZoR9_jFTX0k — Review harness engineering video by July 10 (saved 7/3, due July 10th) — `245adc04-f039-4d5f-8b32-a25abc4dc0b3`
 - [ ] https://youtu.be/rBhAVL4tz14?is=t8djFbZTwf3y4Xos — Review AI careers video for key insights (saved 7/3, due July 10th) — `8987d1eb-dbb1-4fed-9255-68b5ff37b5e0`
@@ -17,6 +17,7 @@ _Last synced from database: 2026-07-11 (via `brain.py --pending-pans`)_
 - [ ] https://youtu.be/DTCyvo6cC54?is=RhziBQ1cu0Z2H5q9 — Review second brains video for relevant concepts (saved 7/6, due July 10th) — `7339a478-6f84-4f86-a278-9dcf922d34b8`
 - [ ] https://youtu.be/QSK4vf_ZTRA?is=w2KgNhJ-2wpMwKdR — Review open engine AI agent handoff video (saved 7/8, due July 10th) — `9116068e-ea4b-45c7-bec0-d5c398b9f858`
 - [ ] https://youtu.be/suY66oTDn0s?is=eMohLBYp-_fQVZ9E — Multi-agent self-checking system research (saved 7/10, due July 10th) — `2f0b8480-66fa-48e8-9b97-058338d2d2a0`
+- [ ] https://youtu.be/PRqiGS6fnIM?is=WLv6jfSh7qCv0BuR — Review AI task classification video (saved 7/11, due July 20th) — `feb8b50f-2a81-40da-ad58-5bf9573d03d1`
 - [ ] https://youtu.be/EJyuu6zlQCg?si=ibkoofMtrYLDL_eN — Copilot CLI skills enhancement from video (saved 3/19) — `4c312f1e-b8c6-4ed1-8c47-28b6266ded66`
 - [ ] https://www.aihero.dev/5-agent-skills-i-use-every-day — AI Hero Agent Skills Reference Files (saved 3/19) — `35139591-2104-4876-a57d-6bbdc1a11c8c`
 - [ ] https://youtu.be/-u_igSQHAIo?si=Ib8g60mQtHCg0QNV — Claude code skills framework seven levels (saved 3/19) — `11f8a69a-ed10-4512-a9c9-f13f6dfea43a`
