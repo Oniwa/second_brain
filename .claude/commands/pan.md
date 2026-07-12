@@ -107,14 +107,14 @@ For each extracted item:
     Recommendation: downgrade to ⚠️ — brain already has this principle; only keep if this source adds new nuance.
 ```
 
-**Soft warning (65–84%)** — possible overlap, review before capturing:
+**Soft warning (55–84%)** — possible overlap, review before capturing:
 ```
   ~ Possible overlap (74%) — "Trust requires visibility into system errors"
     Summary: Systems are abandoned not for imperfection but for loss of trust from mysterious errors.
     Recommendation: review — similar concept exists; only capture if this source adds meaningfully new framing.
 ```
 
-If no matches are at or above 65%, say nothing.
+If no matches are at or above 55%, say nothing. (Floor lowered from 65% — real near-duplicate concepts, especially within a same-author/same-topic cluster, were found consistently landing at 55–64% and slipping through silently. See `pan_skill_improvements.md` §B2.)
 
 **Step 2 — Score with reason:** Assign a score **and a one-line reason**, taking any overlap into account:
 
@@ -146,9 +146,22 @@ After scoring, show a summary: `X items to capture, Y maybes, Z skipped.`
 
 ---
 
-## Phase 2.5 — Draft (Always Runs)
+## Phase 2.5 — Merge, Draft & Trim (Always Runs)
 
-Before any captures, draft the full text for every ✅ item (and any ⚠️ items the user confirms). Show all drafts as a numbered list so the user can review wording, request trims, or cut items before anything hits the brain.
+### Step 1 — Merge check (before drafting)
+
+Before drafting, scan the scored ✅ items (and any ⚠️ items the user confirms) against each other for items that are really one concept — the inverse of the "one thought per concept" rule: split genuinely distinct ideas, but consolidate items that only look distinct. This is an in-context comparison of the extraction list, not a new `semantic_search` call.
+
+If any are found, state the merge explicitly before drafting, e.g.:
+```
+Merging items 6 and 9 into one draft — both describe the same "harness matters
+more than model" point from different angles.
+```
+Draft once for the merged concept, not once per original item — drafting first and merging after wastes a draft and a review cycle. This is a narrated decision, not a stop-and-wait gate; it rides the single confirmation point at the end of this phase, so state it clearly enough that the user can reject the merge in their one reply.
+
+### Step 2 — Draft
+
+Draft the full text for every surviving ✅ item (post-merge) and any confirmed ⚠️ items. Show all drafts as a numbered list.
 
 For each draft:
 - Write it as a complete, self-contained sentence or short paragraph — not a fragment
@@ -165,9 +178,22 @@ layer should be independently replaceable. Source: Nate B Jones - Why Agents Fai
 Draft 2: ...
 ```
 
-After showing all drafts, ask: **"Capture these now, or any changes first?"**
+### Step 3 — Recommended trims (proactive, after drafting)
 
-If `--commit` was NOT specified (the default), stop here and wait for the user to confirm or request edits before proceeding to Phase 3.
+Before asking to capture, re-read each draft for fat — restated context, editorializing, speculative asides, or filler that doesn't survive the "keep it tight" rule above — and call it out unprompted. Don't wait to be asked "any recommended trims?"; state them alongside the drafts:
+```
+Recommended trims:
+- Draft 3: cut the closing sentence — it's inference the reader can already
+  draw from the facts stated above it.
+- Draft 6: cut the speculative closing clause — forecasting, not a captured fact.
+```
+If a draft has no fat worth cutting, say nothing about it — don't manufacture a trim to seem thorough.
+
+### Confirm
+
+After showing merges, drafts, and recommended trims together, ask: **"Capture these now, or any changes first?"**
+
+If `--commit` was NOT specified (the default), stop here and wait for the user to confirm, request different trims, approve or reject a merge, or edit drafts before proceeding to Phase 3.
 
 ---
 

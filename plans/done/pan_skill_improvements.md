@@ -9,6 +9,17 @@ found this session.
 
 **File to modify:** `.claude/commands/pan.md` (skill-side changes only — no schema/code).
 
+**Status:** ✅ implemented 2026-07-12 via `/grill-me` review. A1 dissolved (see its
+entry below), A2 dropped from this file's scope (real fix landed upstream, see below),
+A3 stays rejected, B1 and B2 shipped into `pan.md` with refinements from the review.
+`wiki_implementation.md`'s overlap spec was updated to match.
+
+**Live verification not yet run.** The plan's own checklist (run a 2+ pan batch,
+confirm merges/trims get narrated and near-dups surface below the old 65% floor) is
+still outstanding — deliberately not blocking this plan's done-status on it (decision
+2026-07-12: verify opportunistically on a future real pan; if that surfaces a problem,
+it gets its own new plan rather than reopening this one).
+
 ---
 
 ## Design principle — two human curation gates
@@ -79,6 +90,16 @@ below the 65% "say nothing" floor (see A-refine B2).
 **If left as-is:** simpler skill, but one lapse in attention ships a silent duplicate
 you won't notice until a search returns twins.
 
+**Resolution (2026-07-12): dissolved, no separate `pan.md` instruction needed.**
+`capture_thought` embeds and stores immediately, so by the time a *second* `/pan`
+invocation runs Phase 2's `semantic_search`, anything captured in a prior invocation is
+already in the searchable brain — same-session awareness was never actually missing.
+The A1 evidence (58% similarity, invisible) was purely a **threshold** problem, fully
+fixed by B2's recalibration below. The other half of what A1 gestured at — items that
+duplicate each other *within* one pan's own extraction list, before either is captured
+— isn't a search problem at all (nothing's in the DB yet); it's what B1's merge pass
+below now handles. A1 is kept here only as the evidence record for why B1 and B2 exist.
+
 ---
 
 ### A2. Transcript cleanup step
@@ -94,6 +115,23 @@ about not capturing transcript *content* into the brain.)
 are complete, delete the fetched transcript `.txt` from the working directory.
 
 **Pros:** no orphaned artifacts / accidental commits.  **Cons:** none material.
+
+**Resolution (2026-07-12): dropped from `pan.md` scope — fixed at the root instead.**
+Investigation during the `/grill-me` review found the litter was never a `second_brain`
+problem: `second_brain`'s repo root was already clean, and Step 0a deliberately doesn't
+know the transcript's absolute path ("the transcript skill handles all machine-specific
+path resolution"), so `pan.md` has no principled way to `rm` a file whose location it
+never learns. The actual bug was in `youtube_transcript/main.py`: its default output
+path was resolved relative to the *caller's* CWD instead of the tool's own directory,
+so the litter's location depended entirely on where `/pan` happened to be invoked from
+(landing in `second_brain` on the established Windows workflow, but in
+`youtube_transcript`'s own root when invoked differently on Linux). Fixed by anchoring
+the default output path to `Path(__file__).resolve().parent / "transcripts"` in that
+project — deterministic regardless of caller CWD, on either platform. Shipped, tested
+(95/95 passing after updating the tests that had asserted the old CWD-relative
+behavior), committed, and pushed to `youtube_transcript`'s `origin/development`
+(commit `0fc0af2`). Accumulation inside that project's own `transcripts/` folder is
+accepted as fine — manual cleanup there, if ever needed, is out of scope for `pan.md`.
 
 ---
 
@@ -147,6 +185,19 @@ folded loop-anatomy into the taxonomy draft.
 **Pros:** matches actual usage; leaner, higher-signal captures; less user prompting.
 **Cons:** slightly longer dry-run output.
 
+**Resolution (2026-07-12): shipped, split into two sub-steps rather than one bundled
+instruction.** The `/grill-me` review surfaced that merges and trims naturally happen
+at opposite ends of Phase 2.5: a **merge** is an item-level decision that must happen
+*before* drafting (drafting first and merging after wastes a draft), while a **trim**
+is a wording-level edit that requires the draft text to already exist. `pan.md`'s
+Phase 2.5 is now three steps — Step 1 Merge check (before drafting, narrated inline,
+e.g. "merging items 6 and 9 into one draft"), Step 2 Draft (unchanged), Step 3
+Recommended trims (proactive, after drafting, e.g. "Draft 3: cut the closing sentence
+— it's inference the reader can already draw"). Neither step gets its own stop-and-wait
+gate — both ride the existing single "Capture these now, or any changes first?"
+question, per user preference, **but both must explicitly state what they changed and
+why** so that single gate remains a real review point rather than a rubber stamp.
+
 ---
 
 ### B2. Recalibrate overlap thresholds
@@ -171,26 +222,39 @@ adjudicate (some will be false positives); mild dry-run noise. **Note:** this po
 the *opposite* direction from the existing 85% spec in `wiki_implementation.md` — that
 spec should be reconciled to this one.
 
+**Resolution (2026-07-12): hard-lowered, not the softer "manually review" alternative.**
+Chose the mechanical floor (55%, always shown) over the judgment-based alternative
+("manually review the 55–64% band for same-author clusters") — the softer version
+relies on the agent *recognizing* a same-author/same-topic cluster before applying
+extra scrutiny, which is exactly the recognition failure that caused the original miss.
+A mechanical floor removes that judgment call entirely; the cost is occasional
+false-positive soft warnings on genuinely unrelated 55–64% matches, cheap to dismiss
+during Phase 2.5. Shipped in `pan.md`'s Phase 2 (bands now: hard ≥85% / soft 55–84% /
+silent <55%) and reconciled into `wiki_implementation.md`'s overlap spec the same day.
+
 ---
 
 ## Priority summary
 
-| # | Item | Priority | Rationale |
+| # | Item | Priority | Status (2026-07-12) |
 |---|---|---|---|
-| A1 | Intra-batch overlap check | **High** | Real data-quality bug that occurred this session; near-dups silently split retrieval. |
-| B1 | Trims + merges first-class | **High** | Requested on every pan; the biggest gap between skill-as-written and skill-as-used. |
-| B2 | Recalibrate thresholds (65%→~55%) | **Medium** | Unblocks A1; surfaces the real overlap band. Reconcile with wiki spec. |
-| A2 | Transcript cleanup | **Medium** | Trivial, removes repo-root litter. |
-| A3 | Density-fatigue nudge | **Rejected** | Misaligned with user workflow — dense creator footprint is deliberate curation, not bloat. Guard concepts (A1/B2), not creators. |
+| B1 | Trims + merges, split into merge-pass (pre-draft) + trim-pass (post-draft) | **High** | **Shipped** in `pan.md` Phase 2.5. |
+| B2 | Recalibrate thresholds to hard ≥85% / soft 55–84% / silent <55% | **High** | **Shipped** in `pan.md` Phase 2 and reconciled into `wiki_implementation.md`. |
+| A1 | Intra-batch overlap check | — | **Dissolved** — fully covered by B2 (cross-pan case) + B1 (within-pan case). No separate `pan.md` change. |
+| A2 | Transcript cleanup | — | **Resolved upstream** — root cause fixed in `youtube_transcript/main.py` (commit `0fc0af2`, pushed). Not a `pan.md` concern. |
+| A3 | Density-fatigue nudge | **Rejected** | Unchanged — misaligned with user workflow. Dense creator footprint is deliberate curation, not bloat. Guard concepts (B1/B2), not creators. |
 
 ---
 
 ## Verification
-1. Read the updated `pan.md` and confirm A1, A2, B1, B2 are present (A3 is rejected —
-   confirm no creator/source-saturation nudge was added).
+1. Read the updated `pan.md` and confirm B1 (merge pass + trim pass, both narrated,
+   both riding the single Phase 2.5 gate) and B2 (55%/85% bands) are present as
+   written above; confirm no creator/source-saturation nudge was added (A3 stays
+   rejected) and no transcript-deletion step was added (A2 resolved elsewhere).
 2. Run a batch of 2+ related pans next session — confirm the agent surfaces a
-   same-session near-dup below 65% (A1/B2) and proposes trims/merges unprompted (B1).
-3. Confirm the transcript `.txt` is deleted after each pan (A2).
+   same-session near-dup below the old 65% floor (proves B2), and proactively states
+   merges and trims with explicit reasons before asking to capture, without being
+   asked (proves B1).
 
 ## Note on scope
 Skill-file changes only. The tooling-side fixes (`find_by_url`, pan-queue visibility,

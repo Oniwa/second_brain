@@ -1,7 +1,7 @@
 # Current Work
 
 ## Active
-**Nothing in flight.** `get_stats`, the recap safety rules, the recap CURRENT.md drift-check, the `workspace` project-scoping field, and the `get_pans` skill were just shipped (see Recently Shipped) — pick the next item from Up Next below.
+**Nothing in flight.** The `pan.md` skill rework (merge/trim + threshold recalibration) was just shipped (see Recently Shipped) — pick the next item from Up Next below. One opportunistic follow-up: the plan's own live-verification checklist (confirm merges/trims get narrated and near-dups surface correctly) hasn't been run yet — deliberately not blocking, will verify on a future real `/pan`; if that surfaces a problem it gets its own new plan.
 
 ---
 
@@ -10,9 +10,6 @@
 ### Proven bugs (highest priority — `plans/in_progress/mcp_improvements.md`)
 - **`find_by_url` tool missing** — no way to look up a thought by URL; root cause of repeated pan-dedup false negatives (several videos looked "unpanned" on URL search when they'd already been fully panned). §4
 - **Pan queue visibility, remainder** — §5 item 2's `--pending-pans` shipped 2026-07-11 as part of `get_pans`; the Discord `!pans` half and item #1's first-class `pan_status` field remain open
-
-### Skill-only edits — no code, just `.md` files
-- **`pan_skill_improvements.md`** → edit `.claude/commands/pan.md`: A1 intra-batch overlap check, A2 delete fetched transcript after pan, B1 make trims+merges proactive in Phase 2.5, B2 lower overlap floor 65%→~55% (real near-dups this week landed at 55–64%, invisible to the current threshold). A3 (creator-saturation nudge) was explicitly rejected — dense Nate B. Jones coverage is deliberate curation, not bloat.
 
 ### Follow-ups from the `workspace` field (shipped 2026-07-10, `plans/done/project_scoping_field.md`)
 - **`scripts/brain.py` `--search`/`--recent` scoping** — same `workspace` filtering the MCP tools now have; deliberately deferred as lower priority in the plan
@@ -32,13 +29,14 @@
 - **Proactive resurfacing of external insights** (`open_brain_improvements.md`, bottom) — relevance-linked design agreed (1 insight/day, ~60% relevance floor, gated) but not built; this is the actual fix for the "pull-only synthesis" gap identified in a 2026-07-02 brain-grading session (B+ retrieval, A- overall)
 - **`recall_before_work_skill.md`** (stub) — `/start`-style skill to auto-pull relevant context at session start; distinct from the external-resurfacing item above (automates what the user already does well, vs. fixing what they can't query at all) — **unblocked 2026-07-10**, the `workspace` scoping mechanism it needed now exists and is verified working; still needs its own planning session for the remaining open questions (trigger mechanism, topic inference, digest overlap)
 - **`cross_tool_skill_sync.md`** (new stub) — keep `grill-me`/`recap` in sync across Claude Code (Linux home) and GitHub Copilot CLI (Windows work) from one source-controlled copy in this repo; blocked on confirming Copilot's actual `.copilot/skills/<name>/` file layout and scope (repo vs. user-global) from the work PC — current `scripts/link_global_skills.py` is the superseded symlink-based approach, not yet rewritten
-- **Concept-level dedup/merge** (`wiki_implementation.md`, bottom) — near-dup insights across sources still accrete unmerged; deferred to the Phase 2 `thought_edges` classifier; also needs to reconcile the 85% wiki-time threshold against pan's revised ~55% floor (B2 above)
+- **Concept-level dedup/merge** (`wiki_implementation.md`, bottom) — near-dup insights across sources still accrete unmerged; deferred to the Phase 2 `thought_edges` classifier. The pan-time/wiki-time threshold reconciliation is done (both now 85%/55%, 2026-07-12); open question is only whether the future edge-classifier should share that threshold or use its own
 
 ---
 
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-07-12 | Pan skill rework (B1/B2) | `/grill-me` review of `pan_skill_improvements.md` resolved all open items: A1 (intra-batch overlap) dissolved as a non-issue once B2 shipped; A2 (transcript litter) traced to a real bug in the separate `youtube_transcript` project (`main.py` wrote output relative to caller's CWD instead of its own `transcripts/` folder) — fixed there, tests updated (95/95 passing), committed and pushed to that repo's `origin/development` (`0fc0af2`); A3 stays rejected. B1 shipped as two narrated sub-steps in `pan.md` Phase 2.5 (merge check before drafting, recommended-trims pass after), both riding the existing single confirm gate. B2 shipped: overlap bands recalibrated to hard ≥85% / soft 55–84% / silent <55% (from a 65% floor that hid real near-dupes landing at 55–64%), reconciled into `wiki_implementation.md`'s matching spec. Plan moved to `plans/done/pan_skill_improvements.md`; live-batch verification deliberately deferred, not blocking |
 | 2026-07-11 | `get_pans` skill | Haiku-driven skill (snake_case naming, new convention) that regenerates `open_pans.md` from the live brain — replaces manual reconciliation. `brain.py --pending-pans` runs the deterministic structural query (`source=discord` + has URL + `status=active`); confirmed via ground-truth review that this alone is the complete, correct set (no intent-classification needed — an initial attempt to exclude "generic-sounding" saves was wrong on review). Verified exact match against a hand-built 19-item baseline. `disable-model-invocation: true` so it only runs on explicit `/get_pans`, not autonomously. `plans/done/get_pans_skill.md`; supersedes/completes `mcp_improvements.md` §5 items #2 and #5 |
 | 2026-07-10 | `workspace` project-scoping field | Nullable `thoughts.workspace` column (migration `007`), derived client-side at capture time (external-gate → `.workspace` override file → git-toplevel basename → cwd basename → null) in MCP `captureThought` — covers direct captures + `/recap` + `/pan` for free, both call the same function. All 4 MCP query tools (`semantic_search`, `list_recent`, `get_context`, `meeting_prep`) now scope to `<current> + global` by default with a `workspace:"all"` override and a `scope:` header; `semantic_search` RPC extended (migration `008`). Backfill: `agile_backlog_builder`=19, `abucw`=18, `idea_center_ai_policy`=21 (extended from the plan's original 6 — see plan for reasoning). Verified live end-to-end. `plans/done/project_scoping_field.md` |
 | 2026-07-03 | Recap CURRENT.md drift check | Step 4 added to `recap.md`: compares CURRENT.md's Active/Up Next against session git history, flags a specific mismatch as a question, never auto-edits — flag-only by design |
@@ -60,7 +58,7 @@
 - Full wiki plan: `plans/in_progress/wiki_implementation.md`
 - Full dashboard plan: `plans/in_progress/dashboard_improvements_plan.md` · audit page: `plans/in_progress/dashboard_audit_plan.md`
 - MCP server plan: `plans/in_progress/mcp_improvements.md`
-- Pan skill plan: `plans/in_progress/pan_skill_improvements.md`
+- Pan skill plan (done): `plans/done/pan_skill_improvements.md`
 - Recap skill plan (done): `plans/done/recap_skill_improvements.md` · follow-up stub: `plans/in_progress/recall_before_work_skill.md`
 - Workspace field plan (done): `plans/done/project_scoping_field.md`
 - `get_pans` skill plan (done): `plans/done/get_pans_skill.md`

@@ -350,12 +350,14 @@ Run `semantic_search` for each extracted item during Phase 2 scoring, before ass
 | Decision | Choice |
 |---|---|
 | When | Phase 2 — before scoring each item, so overlap can change ✅ → ⚠️ or ❌ |
-| Threshold | 85% similarity |
-| Results shown | Top 2 matches above threshold |
+| Threshold | Two-band, not a single cutoff: hard flag ≥85% (likely duplicate); soft warning 55–84% (review before capturing); silent <55%. Recalibrated 2026-07-12 from a 65% soft floor — real near-duplicate concepts, especially within a same-author/same-topic cluster, were found consistently landing at 55–64% and slipping through silently. See `pan_skill_improvements.md` §B2. |
+| Results shown | Top 2 matches above the soft-warning floor |
 | Display | Full match block below the item: title + summary + similarity %; include recommendation to keep or downgrade |
 | User action | Final call on score — keep ✅, downgrade to ⚠️ or ❌ |
-| No overlap | Silent — nothing shown |
+| No overlap | Silent — nothing shown below 55% |
 | Update existing | Deferred to Future Enhancements (test the workflow first) |
+
+This threshold is calibrated for pan-time dedup only (comparing a new extracted item against the settled brain). Whether the future `thought_edges` DUPLICATE/SUBSUMES classifier (see §7 below) should share this exact threshold, or use its own, is still an open design question — deferred to that work, not resolved here.
 
 ---
 
@@ -616,7 +618,7 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 
 Archival hygiene is actually healthy (191 thoughts archived, ~10% of the brain — corrects an earlier "you never prune" critique that was based on a broken `get_stats`). But archival is mostly **reminders/admin**, not **insight dedup**. Concept-level near-duplicate *insights* still accrete unmerged — the same idea captured from multiple sources splits retrieval across near-dups instead of consolidating.
 
-This belongs to the synthesis/contradiction layer: the Phase 2 typed-edge classifier and `thought_edges` are the natural place to detect "these two thoughts are the same concept" (a `DUPLICATE`/`SUBSUMES` edge type) and offer merge, not just contradiction (`TENSION`/`EVOLVED`). Also reconcile the overlap threshold: this plan specifies **85%** for overlap detection, but the `/pan` skill found real conceptual near-dups sitting at **55–64%** (see `pan_skill_improvements.md` item B2) — a single 85% floor misses them. Decide one calibrated threshold (or a two-band scheme) shared across pan-time dedup and wiki-time edge detection.
+This belongs to the synthesis/contradiction layer: the Phase 2 typed-edge classifier and `thought_edges` are the natural place to detect "these two thoughts are the same concept" (a `DUPLICATE`/`SUBSUMES` edge type) and offer merge, not just contradiction (`TENSION`/`EVOLVED`). The pan-time overlap threshold has since been reconciled (2026-07-12 — see the spec above, now a two-band 85%/55% scheme matching `pan_skill_improvements.md` §B2). What's still open: whether the `thought_edges` classifier should share that same threshold or use its own — decide when this stub is picked up.
 
-**Status:** stub — captured 2026-07-02, design deferred to Phase 2 edge work.
+**Status:** stub — captured 2026-07-02, design deferred to Phase 2 edge work. Threshold half of the reconciliation is done; the shared-threshold-with-edge-classifier question remains.
 
