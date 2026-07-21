@@ -7,6 +7,8 @@
 
 ## Up Next
 
+**Priority order lives in `plans/roadmap.md`** (ranked 2026-07-20) — start from the top there when picking new work. The groupings below are by blocker type, not priority; don't treat list order in this section as sequencing.
+
 ### Proven bugs (highest priority — `plans/in_progress/mcp_improvements.md`)
 - **`find_by_url` tool missing** — no way to look up a thought by URL; root cause of repeated pan-dedup false negatives (several videos looked "unpanned" on URL search when they'd already been fully panned). §4
 - **Pan queue visibility, remainder** — §5 item 2's `--pending-pans` shipped 2026-07-11 as part of `get_pans`; the Discord `!pans` half and item #1's first-class `pan_status` field remain open
@@ -25,6 +27,8 @@
 
 ### Needs more design before implementing
 - **`compile_wiki_pagination_bug.md`** (new stub) — same 1000-row PostgREST silent-cap bug as `get_stats`, now found in `compile_wiki.py` (`get_qualifying_projects` confirmed broken; `get_distinct_topics`/`get_distinct_people`/`fetch_thoughts_for_project` likely also undercounting). Bigger than the original "fix the JSON" task — needs a grill-me pass to scope (shared pagination helper vs. per-site fix, which of the 9 call sites to fix now vs. defer)
+- **`wiki_weekly_cron.md`** (new stub, 2026-07-20) — everything needed to automate `compile_wiki.py --all` is already built; only blocked on confirming the Pi is actually fine for this (the "locks to home network" framing may not hold given digest/nudge/remind already run there against the same cloud services)
+- **`ai_token_tracker.md`** (new stub, 2026-07-20) — zero cost/token visibility exists across the 6 LLM/embedding call sites today; needs a planning session (table vs. log file, shared TS/Python logging path, pricing table maintenance)
 - **`digest_backlog_filter.md`** — recap-sourced open threads keep getting promoted to Top 3 actions; fix sketch exists (stamp `source: "recap"`, add `[BACKLOG]` bucket) but marker choice / promotion path / retroactive backfill are undecided
 - **Proactive resurfacing of external insights** (`open_brain_improvements.md`, bottom) — relevance-linked design agreed (1 insight/day, ~60% relevance floor, gated) but not built; this is the actual fix for the "pull-only synthesis" gap identified in a 2026-07-02 brain-grading session (B+ retrieval, A- overall)
 - **`recall_before_work_skill.md`** (stub) — `/start`-style skill to auto-pull relevant context at session start; distinct from the external-resurfacing item above (automates what the user already does well, vs. fixing what they can't query at all) — **unblocked 2026-07-10**, the `workspace` scoping mechanism it needed now exists and is verified working; still needs its own planning session for the remaining open questions (trigger mechanism, topic inference, digest overlap)
@@ -55,7 +59,10 @@
 ---
 
 ## Reference
+- **Priority ranking:** `plans/roadmap.md`
 - Full wiki plan: `plans/in_progress/wiki_implementation.md`
+- Weekly wiki cron stub: `plans/in_progress/wiki_weekly_cron.md`
+- AI token/cost tracker stub: `plans/in_progress/ai_token_tracker.md`
 - Full dashboard plan: `plans/in_progress/dashboard_improvements_plan.md` · audit page: `plans/in_progress/dashboard_audit_plan.md`
 - MCP server plan: `plans/in_progress/mcp_improvements.md`
 - Pan skill plan (done): `plans/done/pan_skill_improvements.md`

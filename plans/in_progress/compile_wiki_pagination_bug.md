@@ -1,6 +1,31 @@
 # compile_wiki.py — Silent 1000-Row Truncation (Same Bug Class as `get_stats`, Different Blast Radius)
 
-**Status:** newly diagnosed 2026-07-03, **not yet planned in detail — needs a grill-me pass before implementation.** Do not implement from this write-up alone.
+**Status:** diagnosed 2026-07-03, **scoped via grill-me 2026-07-21 — ready to implement.** All open design questions below are resolved; see "Final Design" for the build spec.
+
+---
+
+## Final Design (resolved via grill-me 2026-07-21)
+
+**1. Fix location — shared helper, not per-call-site.** Pagination is built into `supabase_get()` itself, so all 9 call sites in this file are fixed by one change, current and future. No caller currently wants a true capped/top-N result — every one of the 9 sites conceptually wants "every row matching this filter" — so a transparent full-fetch fix is correct for all of them with no exceptions to carve out.
+
+**2. Mechanism — offset/limit loop, not Range header.** `supabase_get()` internally loops issuing GETs with `offset=0,1000,2000,...` (page size capped at 1000, matching `supabase/config.toml`'s `max_rows = 1000`) until a page returns fewer rows than requested, then concatenates all pages. No response-header parsing needed (rejected the `Range`/`Content-Range` alternative — no benefit here big enough to justify inspecting headers when the exhaustion signal from page-length is sufficient). The caller-facing `limit` parameter keeps its current meaning (max total rows desired across all pages) — **zero changes needed at any of the 9 call sites for the pagination logic itself.**
+
+**3. Ordering — `id.asc` tiebreaker everywhere.** Offset-based pagination is only correct if row order is stable between page requests. `thoughts.id` and `wiki_pages.slug`-backed rows are unique per row, so append `,id.asc` to every paginated query's `order` param (as a secondary key where an order already exists, e.g. `fetch_thoughts_for_project`'s `created_at.desc`; as the sole key where none exists yet, e.g. `get_qualifying_projects`, `get_distinct_topics`, `get_distinct_people`, `get_unmatched_project_thoughts`, `get_existing_pages`). This is a small edit at each call site (add/extend the `order` param), separate from the pagination-loop change inside `supabase_get()`.
+
+**4. Safety cap — hard abort past 50,000 rows.** A generous ceiling (~15-30x current corpus size) that will never fire under normal growth, but converts a hypothetical "server keeps returning data" bug into a loud `RuntimeError` instead of a silent runaway loop.
+
+**5. Scope — all 9 call sites in one pass.** Free consequence of fixing the shared helper; no "confirmed-broken now, latent-risk-later" split to track or revisit.
+
+**6. Cost — self-resolving, no explicit budget needed.** The loop only issues a 2nd+ request when a specific query actually has >1000 matching rows. Today that's only `get_qualifying_projects`, `get_distinct_topics`, `get_distinct_people`, and `fetch_thoughts_for_project` (the four corpus-wide-unfiltered functions) — so a full `--all` run adds roughly 1-2 extra HTTP round trips total, not per-page-compiled. Filtered per-topic/per-person queries stay single-request as long as no single topic/person exceeds 1000 thoughts.
+
+**7. Verification — total-count match + spot-checks.** The per-topic/per-person tally logic in `get_distinct_topics`/`get_distinct_people` was never itself buggy — it faithfully counts whatever thoughts happen to be in memory. The only bug is incomplete fetch. So:
+   - Primary check: after the fix, the total row count fetched by `get_qualifying_projects`/`get_distinct_topics`/`get_distinct_people` must equal the true active-thought count from `execute_sql` ground truth (mirrors how the `get_stats` fix was verified).
+   - Additional spot-checks: verify 2-3 specific known values via direct `execute_sql` queries — at minimum, Meal Planner and Board Game Inventory project counts (the two that originally exposed this bug) and one high-volume topic (e.g. "AI agents", ~151 thoughts, to confirm no off-by-one at a page boundary).
+   - `--all --dry-run` should list Meal Planner and Board Game Inventory as qualifying projects (both previously showed 0/2 due to the truncation), and the printed `total active fetched:` debug line (if kept) should match ground truth.
+
+**Not in scope for this pass** (explicitly deferred, not forgotten):
+- The `UNMATCHED PROJECT THOUGHTS` list surfaced by `--dry-run` (expanding `project_definitions.json` coverage) is a separate, legitimate follow-up task — not conflated with this pagination fix.
+- The "fetch-all-then-filter-in-Python" architecture of `get_qualifying_projects`/`fetch_thoughts_for_project` (fetch every active thought, then filter client-side by anchor topic) is a separate efficiency question from the truncation bug itself. Fixing pagination makes it *correct*; it doesn't change that it's still fetching more than a server-side-filtered query would need to. Not addressed here — flagged for a future pass if it ever becomes a real cost/latency problem at current corpus scale (~1,665-3,000 active thoughts), which it isn't yet.
 
 ---
 
@@ -58,13 +83,15 @@ Every function above needs **actual row data** (`topics`, `people`, `title`, ful
 
 ## Open questions for the grill-me session (not resolved — this is a stub)
 
-- **Shared helper vs. per-call-site fix.** Should `supabase_get` itself gain pagination (transparent to every caller, fixes all 9 sites at once), or should only the confirmed-broken/highest-risk sites get a bespoke paginating variant? A shared fix is more thorough but touches a lower-level helper used everywhere in the file — larger blast radius to review.
-- **Explicit ordering.** Should every paginating query get an explicit `order` clause (most don't have one today, e.g. `get_qualifying_projects`) so pagination is deterministic and reproducible, independent of this fix?
-- **Cost/performance.** Fetching 1665+ rows via repeated ~1000-row pages means at least 2 round-trips for the corpus-wide queries today, more as the brain grows. Compare against this file's existing cost-consciousness elsewhere (`--skip-unchanged` for cron efficiency) — does this fix need its own cost-awareness, or is 2-3 extra HTTP round-trips per `--all` run a non-issue?
-- **Scope of this pass.** Fix only the confirmed-broken `get_qualifying_projects` now (minimal, matches the original task's urgency), or fix all corpus-wide-unfiltered functions in one pass since they're the same bug (`get_distinct_topics`, `get_distinct_people`, `fetch_thoughts_for_project`)? Leaning toward all four together since they share one root cause and one fix shape, but not decided.
-- **Filtered-query functions** (`fetch_thoughts_for_topic`, `fetch_thoughts_for_person`, `get_unmatched_project_thoughts`, `get_existing_pages`, `cmd_list`) — fix now defensively even though not yet broken, or leave as a documented latent risk (like the `get_stats` window-fetch comment) and revisit if/when a query actually crosses its limit?
-- **Verification approach** — after the fix, `get_qualifying_projects`'s debug script should report `total active fetched: 1665` (or whatever the live count is at fix time) and Meal Planner should show ≥2 matches; `--all --dry-run` should list 4 qualifying projects instead of 3. What's the equivalent verification for the topic/people count functions, given there's no single "known wrong number" to check them against the way `get_stats` had ground truth via `execute_sql`?
-- **Relationship to the `UNMATCHED PROJECT THOUGHTS` list** — the dry-run surfaced ~19 project-category thoughts not covered by any current project definition (e.g. "Add voice dictation to second brain," "Build NAS with Raspberry Pi controller"). That's a separate, legitimate task (expanding `project_definitions.json` coverage) — don't conflate it with this pagination fix, but worth flagging as a follow-up once the underlying data is trustworthy.
+All resolved 2026-07-21 via grill-me — see "Final Design" above for the decisions. Kept here for the historical record of what was actually asked:
+
+- ~~Shared helper vs. per-call-site fix.~~ → shared helper (Final Design #1)
+- ~~Explicit ordering.~~ → `id.asc` tiebreaker everywhere (Final Design #3)
+- ~~Cost/performance.~~ → self-resolving, no explicit budget needed (Final Design #6)
+- ~~Scope of this pass.~~ → all 9 sites together, free consequence of the shared-helper fix (Final Design #5)
+- ~~Filtered-query functions — fix now or leave as latent risk?~~ → fixed now, for free, alongside everything else (Final Design #5)
+- ~~Verification approach for functions with no single known-wrong number.~~ → total-count match (proof by construction, since the tally logic itself was never buggy) + spot-checks on Meal Planner/Board Game Inventory/a high-volume topic (Final Design #7)
+- **Relationship to the `UNMATCHED PROJECT THOUGHTS` list** — the dry-run surfaced ~19 project-category thoughts not covered by any current project definition (e.g. "Add voice dictation to second brain," "Build NAS with Raspberry Pi controller"). Confirmed out of scope for this pass (see Final Design, "Not in scope") — a separate, legitimate task once the underlying data is trustworthy.
 
 ---
 
