@@ -9,7 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CONFIDENCE_THRESHOLD = 0.7;
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
-const SONNET_MODEL = "claude-sonnet-4-6";
+const SONNET_MODEL = "claude-sonnet-5";
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
 function extractUrls(text: string): string[] {
@@ -97,6 +97,7 @@ async function classify(
     body: JSON.stringify({
       model,
       max_tokens: 512,
+      ...(model === SONNET_MODEL ? { thinking: { type: "disabled" } } : {}),
       messages: [
         {
           role: "user",
@@ -112,7 +113,11 @@ async function classify(
   }
 
   const data = await response.json();
-  const raw = data.content[0].text.trim();
+  const textBlock = data.content.find((b: { type: string }) => b.type === "text");
+  if (!textBlock) {
+    throw new Error(`No text block in response content from ${model}: ${JSON.stringify(data.content)}`);
+  }
+  const raw = textBlock.text.trim();
 
   try {
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();

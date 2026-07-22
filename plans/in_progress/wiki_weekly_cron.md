@@ -1,6 +1,20 @@
 # Wire Up Weekly Wiki Compile Cron
 
-**Status:** ready to implement — grill-me pass complete 2026-07-22. All open questions resolved (see Decisions). Not yet built.
+**Status:** Step 1 shipped (UA fix). Step 2 (manual `--all` correction) attempted 2026-07-22 and failed — see Update below. Steps 3–4 (cron job, Pi deploy) not started.
+
+## Update — 2026-07-22: first `--all` attempt failed, root causes fixed, not yet re-run
+
+Two unrelated bugs surfaced during the first real `--all` run, both now fixed:
+
+1. **`OUTPUT_DIR` pointed at the wrong folder.** The constant was `compiled-wiki` (hyphen) — a folder that doesn't exist. The actual git-tracked wiki (remote `Oniwa/compiled_wiki`, 154 existing pages) lives at `compiled_wiki` (underscore). Fixed — `compile_wiki.py` now writes to the correct folder. Supabase (the real source of truth for `wiki_pages`) was never affected by this bug; only the local markdown mirror would have landed in the wrong place.
+2. **Sonnet 4.6 → 5 upgrade broke response parsing.** Sonnet 5 defaults to adaptive thinking **on** when `thinking` is omitted (4.6 defaulted to off), so `content[0]` became a `thinking` block instead of `text` on many calls — 19 of 418 pages made real, billed API calls (~$4) that then threw `KeyError: 'text'` and produced nothing. Fixed by explicitly setting `thinking: {"type": "disabled"}` and parsing by scanning for the `text`-type block instead of assuming index 0 (`compile_wiki.py` and both edge functions).
+3. Separately, ~397/418 pages failed on an unrelated local DNS blip (`getaddrinfo failed`) during the same run — not billed, not a code bug, likely just a network drop.
+
+**Net result of the attempt: 1/418 pages compiled successfully** ("documentation"). The correction run has not yet completed.
+
+**Before re-running:** `wiki_thinking_ab_test.md` (new stub) — whether to enable adaptive thinking for wiki synthesis specifically is an open, deliberately deferred question; disabled is the current safe default across all 3 Sonnet call sites, not a tested decision.
+
+**Before re-running on the Linux machine specifically:** confirm `compiled_wiki` resolves the same way there — it needs to exist as a sibling directory to `scripts/` (i.e., the private wiki repo cloned into the `second_brain` checkout at `compiled_wiki/`), same as this Windows machine. Not yet verified on Linux.
 
 ---
 

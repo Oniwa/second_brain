@@ -30,11 +30,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-SONNET_MODEL = "claude-sonnet-4-6"
+SONNET_MODEL = "claude-sonnet-5"
 DEFAULT_TOPIC_THRESHOLD = 5
 DEFAULT_PERSON_THRESHOLD = 2
 DEFAULT_PROJECT_THRESHOLD = 2
-OUTPUT_DIR = Path(__file__).parent.parent / "compiled-wiki"
+OUTPUT_DIR = Path(__file__).parent.parent / "compiled_wiki"
 
 # PostgREST caps any single response at max_rows (supabase/config.toml). supabase_get()
 # pages past this transparently — see its docstring.
@@ -352,6 +352,7 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
     body = json.dumps({
         "model": SONNET_MODEL,
         "max_tokens": 8192,
+        "thinking": {"type": "disabled"},
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_content}],
     }).encode("utf-8")
@@ -369,7 +370,10 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                return data["content"][0]["text"].strip()
+                text_block = next((b for b in data["content"] if b.get("type") == "text"), None)
+                if text_block is None:
+                    raise ValueError(f"No text block in response content: {data['content']}")
+                return text_block["text"].strip()
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8")
             if e.code in _SYSTEMIC_CODES:
@@ -393,7 +397,11 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
         req = urllib.request.Request(
             "https://discord.com/api/v10/users/@me/channels",
             data=body,
-            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/Oniwa/second_brain, 1.0)",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -404,7 +412,11 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
         req = urllib.request.Request(
             f"https://discord.com/api/v10/channels/{channel_id}/messages",
             data=body,
-            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/Oniwa/second_brain, 1.0)",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

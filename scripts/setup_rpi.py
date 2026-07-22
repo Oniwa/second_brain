@@ -139,6 +139,7 @@ def setup_cron() -> None:
     digest  = f"{project_path}/discord/digest.py"
     nudge   = f"{project_path}/scripts/nudge.py"
     remind  = f"{project_path}/scripts/remind.py"
+    wiki    = f"{project_path}/scripts/compile_wiki.py"
 
     jobs = [
         ("Daily digest — 7am", f"0 7 * * *   {actual_user} {python} {digest} --daily >> {log_dir}/digest-daily.log 2>&1"),
@@ -146,6 +147,7 @@ def setup_cron() -> None:
         ("Nudge check — 6pm (silent if captured recently)", f"0 18 * * *  {actual_user} {python} {nudge} >> {log_dir}/nudge.log 2>&1"),
         ("Weekly digest — Sunday 8am", f"0 8 * * 0   {actual_user} {python} {digest} --weekly >> {log_dir}/digest-weekly.log 2>&1"),
         ("Weekly review — Sunday 9am", f"0 9 * * 0   {actual_user} {python} {digest} --review >> {log_dir}/digest-review.log 2>&1"),
+        ("Weekly wiki recompile — Sunday 3am", f"0 3 * * 0   {actual_user} {python} {wiki} --all --skip-unchanged >> {log_dir}/wiki-compile.log 2>&1"),
     ]
 
     if CRON_FILE.exists():
