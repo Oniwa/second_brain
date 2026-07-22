@@ -36,6 +36,11 @@ DEFAULT_PERSON_THRESHOLD = 2
 DEFAULT_PROJECT_THRESHOLD = 2
 OUTPUT_DIR = Path(__file__).parent.parent / "compiled-wiki"
 
+# PostgREST caps any single response at max_rows (supabase/config.toml). supabase_get()
+# pages past this transparently — see its docstring.
+POSTGREST_PAGE_SIZE = 1000
+POSTGREST_SAFETY_CAP = 50000
+
 
 class SystemicAPIError(Exception):
     """Raised when an Anthropic API error indicates the whole run is doomed.
@@ -266,21 +271,44 @@ def fmt_elapsed(seconds: int) -> str:
 # ── Supabase ─────────────────────────────────────────────────────────────────
 
 def supabase_get(url: str, key: str, path: str, params: dict) -> list:
-    qs = urllib.parse.urlencode(params)
-    req = urllib.request.Request(
-        f"{url}{path}?{qs}",
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode("utf-8")
-        raise RuntimeError(f"Supabase GET {path} error {e.code}: {raw}") from e
+    """Fetch every row matching `params`, transparently paginating past PostgREST's
+    max_rows cap (supabase/config.toml: max_rows = 1000) via repeated offset/limit
+    requests. `params["limit"]` is treated as a per-page size hint (clamped to
+    POSTGREST_PAGE_SIZE), not a total-result cap — callers always get the complete
+    result set, not whatever number they happened to pass. Ordering must be
+    deterministic (callers append `,id.asc` as a tiebreaker) or pages can skip/
+    duplicate rows. Aborts past POSTGREST_SAFETY_CAP rows rather than looping forever.
+    """
+    page_size = min(int(params.get("limit", POSTGREST_PAGE_SIZE)), POSTGREST_PAGE_SIZE)
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    results: list = []
+    offset = 0
+    while True:
+        page_params = dict(params)
+        page_params["limit"] = str(page_size)
+        page_params["offset"] = str(offset)
+        qs = urllib.parse.urlencode(page_params)
+        req = urllib.request.Request(f"{url}{path}?{qs}", headers=headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                page = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            raise RuntimeError(f"Supabase GET {path} error {e.code}: {raw}") from e
+        results.extend(page)
+        if len(page) < page_size:
+            break
+        if len(results) > POSTGREST_SAFETY_CAP:
+            raise RuntimeError(
+                f"Supabase GET {path}: exceeded safety cap of {POSTGREST_SAFETY_CAP} rows "
+                f"without exhausting results — aborting (possible pagination bug or runaway query)"
+            )
+        offset += page_size
+    return results
 
 
 def supabase_upsert(url: str, key: str, data: dict) -> dict:
@@ -418,8 +446,8 @@ def fetch_thoughts_for_topic(supabase_url: str, key: str, topic: str) -> list:
         "category": "neq.admin",
         "topics": f"cs.{{{topic}}}",
         "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.asc",
-        "limit": "500",
+        "order": "created_at.asc,id.asc",
+        "limit": "1000",
     })
 
 
@@ -428,8 +456,8 @@ def fetch_thoughts_for_person(supabase_url: str, key: str, person: str) -> list:
         "status": "eq.active",
         "people": f"cs.{{{person}}}",
         "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.asc",
-        "limit": "500",
+        "order": "created_at.asc,id.asc",
+        "limit": "1000",
     })
 
 
@@ -437,8 +465,8 @@ def fetch_thoughts_for_project(supabase_url: str, key: str, anchor_topics: list)
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
         "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.desc",
-        "limit": "500",
+        "order": "created_at.desc,id.asc",
+        "limit": "1000",
     })
     anchor_set = {t.lower() for t in anchor_topics}
     return [t for t in thoughts if anchor_set & {tag.lower() for tag in (t.get("topics") or [])}]
@@ -500,7 +528,8 @@ def get_distinct_topics(supabase_url: str, key: str, topic_aliases: dict) -> dic
         "status": "eq.active",
         "category": "neq.admin",
         "select": "topics",
-        "limit": "2000",
+        "order": "id.asc",
+        "limit": "1000",
     })
     counts: dict = {}
     for t in thoughts:
@@ -514,7 +543,8 @@ def get_distinct_people(supabase_url: str, key: str, people_aliases: dict) -> di
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
         "select": "people",
-        "limit": "2000",
+        "order": "id.asc",
+        "limit": "1000",
     })
     counts: dict = {}
     for t in thoughts:
@@ -529,7 +559,8 @@ def get_qualifying_projects(supabase_url: str, key: str, project_defs: dict, thr
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
         "select": "id,topics",
-        "limit": "2000",
+        "order": "id.asc",
+        "limit": "1000",
     })
     result = {}
     for project_name, anchor_topics in project_defs.items():
@@ -546,7 +577,8 @@ def get_unmatched_project_thoughts(supabase_url: str, key: str, project_defs: di
         "status": "eq.active",
         "category": "eq.project",
         "select": "id,title,topics",
-        "limit": "500",
+        "order": "id.asc",
+        "limit": "1000",
     })
     all_anchors = {t.lower() for anchors in project_defs.values() for t in anchors}
     return [t for t in thoughts if not (all_anchors & {tag.lower() for tag in (t.get("topics") or [])})]
@@ -555,6 +587,7 @@ def get_unmatched_project_thoughts(supabase_url: str, key: str, project_defs: di
 def get_existing_pages(supabase_url: str, key: str) -> dict:
     pages = supabase_get(supabase_url, key, "/rest/v1/wiki_pages", {
         "select": "slug,title,entity_type,entity_name,thought_count,stale,last_compiled_at",
+        "order": "id.asc",
         "limit": "1000",
     })
     return {p["slug"]: p for p in pages}
@@ -656,7 +689,7 @@ def compile_single_project(env: dict, project_name: str, anchor_topics: list, dr
 def cmd_list(env: dict) -> None:
     pages = supabase_get(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], "/rest/v1/wiki_pages", {
         "select": "slug,title,entity_type,thought_count,stale,last_compiled_at",
-        "order": "entity_type.asc,thought_count.desc",
+        "order": "entity_type.asc,thought_count.desc,id.asc",
         "limit": "1000",
     })
     if not pages:

@@ -1,6 +1,23 @@
 # compile_wiki.py — Silent 1000-Row Truncation (Same Bug Class as `get_stats`, Different Blast Radius)
 
-**Status:** diagnosed 2026-07-03, **scoped via grill-me 2026-07-21 — ready to implement.** All open design questions below are resolved; see "Final Design" for the build spec.
+**Status:** diagnosed 2026-07-03, scoped via grill-me 2026-07-21, **implemented and verified 2026-07-21.** See "Resolution" below.
+
+---
+
+## Resolution (2026-07-21)
+
+Implemented exactly per the Final Design below: `supabase_get()` in `scripts/compile_wiki.py` now loops on `offset`/`limit` (page size 1000, matching `supabase/config.toml`'s `max_rows`) until a page returns fewer rows than requested, with a 50,000-row safety abort. All 9 call sites got `id.asc` appended to their `order` param (as sole key where none existed, as a tiebreaker where one did) and their `limit` hint standardized to `1000`.
+
+**Verification results:**
+- Raw fetch of all active thoughts returned **2011/2011** rows, exact match to `execute_sql` ground truth (`select count(*) from thoughts where status='active'`), no duplicates, no gaps.
+- **"AI agents" topic:** 330 thoughts — exact match to SQL ground truth. The live dry-run's own staleness marker (`[was 108 -> now 330]`) shows the actual scale of the original bug: the currently-compiled wiki page for this topic was built from barely a third of the real matching thoughts.
+- **Board Game Inventory:** 3 thoughts (SQL ground truth: 3) — `was 0 -> now 3`, the exact symptom that originally exposed this bug.
+- **Meal Planner:** 2 thoughts (SQL ground truth: 2) — `was 0 -> now 2`.
+- `--all --dry-run` now reports **417 pages would compile** (358 topics, 55 people, 4 projects) versus the ~130 pages compiled under the old buggy fetch — consistent with topic/person counts having been undercounted across the board, not just for the two projects that originally surfaced the bug.
+
+**One implementation-time correction to the Final Design as originally written:** point #2 said the caller-facing `limit` param "keeps its current meaning (max total rows desired across all pages)." That would have just raised the truncation ceiling from 1000 to whatever number each site passed (500/1000/2000) rather than eliminating it — corpus growth could trip the same bug again once any single query's true row count exceeded its site's chosen number. Implemented instead so `limit` is purely a **per-page size hint** (still clamped to 1000), and `supabase_get()` always paginates to full exhaustion regardless of that number, bounded only by the 50k safety cap. This matches Final Design #1's actual premise (no caller wants a true capped result) more faithfully than the original wording of #2 did.
+
+**Not done in this pass (unchanged from the original scope decision):** no full `--all` recompile was run — that's a real-cost action (417 Sonnet calls) deliberately left for a separate, explicit decision rather than bundled into the bug-fix verification. See `plans/in_progress/wiki_weekly_cron.md`, which was sequenced right after this fix for exactly this reason.
 
 ---
 

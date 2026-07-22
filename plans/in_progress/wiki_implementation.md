@@ -296,10 +296,10 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 11. ⚠️ Discord DM notification on cron completion — bot returns 403 Forbidden; needs investigation
 12. ✅ Log rotation strategy — crontab redirects stdout+stderr to dated log file; `--skip-unchanged` for cron efficiency
 
-### Project Pages (partial ✅ — 0-thought issue outstanding)
+### Project Pages (complete ✅)
 13. ✅ **Spec**: Decided on `project_definitions.json` — maps project names to anchor topic keywords; no new schema field needed
 14. ✅ **Implement**: `--project` flag + project system prompt + slug `project-{name}` in `compile_wiki.py`
-15. ⚠️ **Board Game Inventory / Meal Planner**: compiled with 0 thoughts — **diagnosis corrected 2026-07-03**: anchor keywords already match real `topics[]` tags (verified directly). Real cause is a silent 1000-row PostgREST truncation in `get_qualifying_projects` and related functions — same bug class as the `get_stats` fix (`mcp_improvements.md` §6), different call sites. See `plans/in_progress/compile_wiki_pagination_bug.md` (not yet scoped/implemented)
+15. ✅ **Board Game Inventory / Meal Planner**: root cause fixed 2026-07-21 — silent 1000-row PostgREST truncation in `get_qualifying_projects` and 8 other call sites (same bug class as the `get_stats` fix, `mcp_improvements.md` §6). `supabase_get()` now paginates transparently; verified via `execute_sql` ground truth (Board Game Inventory: 3 thoughts, Meal Planner: 2 thoughts, both exact). See `plans/done/compile_wiki_pagination_bug.md`
 16. ✅ **Second Brain** (20 thoughts) and **ABUCW** (4 thoughts) pages compiled correctly
 
 ### Wiki Portability (complete ✅)
@@ -557,7 +557,7 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 ## Follow-Up Items (Prioritized)
 
 **Immediate (unblocked):**
-1. ⚠️ **Fix `compile_wiki.py` pagination** (corrected 2026-07-03 — was misdiagnosed as an anchor-keyword problem; anchors are already correct) — see `plans/in_progress/compile_wiki_pagination_bug.md`.
+1. ✅ **Fix `compile_wiki.py` pagination** — implemented and verified 2026-07-21, see `plans/done/compile_wiki_pagination_bug.md`.
 2. ⚠️ **Fix Discord DM 403** — bot returns Forbidden on completion DM; last remaining pre-cron hardening item. Investigate bot DM channel permissions.
 
 **Before scheduling cron (BLOCKER):**
@@ -596,9 +596,9 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 7. ✅ Pre-cron hardening (timestamps, exit codes, systemic error abort, 429 retry, `--skip-unchanged`; Discord DM ⚠️ returns 403)
 8. ✅ Wiki portability — private nested git repo in `compiled-wiki/`
 9. ✅ Full recompile with source labels + footnote citations + URLs (2026-05-09)
-10. ⏳ Fix project_definitions.json (0-thought projects)
+10. ✅ Fix pagination truncation (real root cause of the 0-thought projects, 2026-07-21 — `plans/done/compile_wiki_pagination_bug.md`)
 11. ⏳ Fix Discord DM 403
-12. ⏳ Decide cron location → schedule weekly recompile
+12. ⏳ Decide cron location → schedule weekly recompile (`plans/in_progress/wiki_weekly_cron.md`)
 
 ---
 
