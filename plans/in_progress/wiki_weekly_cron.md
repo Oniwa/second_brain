@@ -1,6 +1,6 @@
 # Wire Up Weekly Wiki Compile Cron
 
-**Status:** Step 1 shipped (UA fix). Step 2 (manual `--all` correction) attempted 2026-07-22 and failed — see Update below. Steps 3–4 (cron job, Pi deploy) not started.
+**Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started.
 
 ## Update — 2026-07-22: first `--all` attempt failed, root causes fixed, not yet re-run
 
@@ -12,9 +12,10 @@ Two unrelated bugs surfaced during the first real `--all` run, both now fixed:
 
 **Net result of the attempt: 1/418 pages compiled successfully** ("documentation"). The correction run has not yet completed.
 
-**Before re-running:** `wiki_thinking_ab_test.md` (new stub) — whether to enable adaptive thinking for wiki synthesis specifically is an open, deliberately deferred question; disabled is the current safe default across all 3 Sonnet call sites, not a tested decision.
-
-**Before re-running on the Linux machine specifically:** confirm `compiled_wiki` resolves the same way there — it needs to exist as a sibling directory to `scripts/` (i.e., the private wiki repo cloned into the `second_brain` checkout at `compiled_wiki/`), same as this Windows machine. Not yet verified on Linux.
+**Before re-running:**
+- `wiki_thinking_ab_test.md` (new stub) — whether to enable adaptive thinking for wiki synthesis specifically is an open, deliberately deferred question; disabled is the current safe default across all 3 Sonnet call sites, not a tested decision.
+- Confirm `compiled_wiki` resolves the same way on the Linux machine — it needs to exist as a sibling directory to `scripts/` (i.e., the private wiki repo cloned into the `second_brain` checkout at `compiled_wiki/`), same as this Windows machine. Not yet verified on Linux.
+- **New Step 2 (smoke test)** — run the 3-entity smoke test below *before* retrying the full `--all` correction, to catch any other lurking Sonnet-5-migration bugs cheaply instead of finding out mid-run again.
 
 ---
 
@@ -36,6 +37,7 @@ Two unrelated bugs surfaced during the first real `--all` run, both now fixed:
    - The pagination fix (2026-07-21) changed nearly every page's count and ~287 pages don't exist yet (417 qualify now vs ~130 before). So the *first* `--all` run is a full ~417-page Sonnet spend no matter what — `--skip-unchanged` can't shortcut it, because those pages' content is genuinely stale against corrected data. This is a one-time event, not a recurring cost.
    - **Do it by hand on the dev machine/PC**, watched, with **plain `--all`** (no `--skip-unchanged`, no `--strict`) to force a full recompile of all 417 qualifying pages. Spot-check a couple of big movers (e.g. "AI agents" 108→330) to confirm the corrected wiki looks right. Running off-Pi keeps the Pi free and makes it easy to cancel if something looks wrong.
    - **Then** enable the Pi cron. Because the DB now holds correct counts, the first automated Sunday run is already cheap (`--skip-unchanged` skips everything unchanged). This matches how `CURRENT.md`/`roadmap.md` already frame the full recompile — a deliberate, real-cost, explicit action, not run ad hoc.
+   - **Amended 2026-07-22:** after the first attempt burned ~$4 on 19 pages before a code bug was caught, a smoke test (Step 2) was added ahead of the full correction — 3 single-entity real calls to catch parsing/response bugs cheaply before committing to all 418 pages again.
 
 5. **Fold in the Discord-DM 403 fix (one line).** The completion DM is already built into `compile_wiki.py` (`notify_and_exit` → `send_discord_dm`) but returns 403 (`wiki_implementation.md` follow-up #2/#11). Root cause found during grill-me: `compile_wiki.py`'s `send_discord_dm` (lines 393–408) sends no `User-Agent` header, so urllib defaults to `Python-urllib/3.x`, which Discord 403s. `digest.py:106` sets `User-Agent: "DiscordBot (https://github.com/Oniwa/second_brain, 1.0)"` and its DM works. Add the same header to `compile_wiki.py` → the Sunday cron DMs "🧠 Wiki compile complete — N page(s)" instead of silently 403-ing into the log. Closes `wiki_implementation.md` #2/#11.
 
@@ -56,31 +58,49 @@ headers={
 }
 ```
 
-### Step 2 — Manual one-time full correction (dev machine, watched)
+### Step 2 — Smoke test (new, 2026-07-22 — added after the failed first attempt)
+Before spending on all 418 pages again, run one entity of each type through the real (non-dry-run, non-`--all`) path, to catch any other Sonnet-5-migration bugs beyond the two already found — 3 calls instead of 418:
+```
+python scripts/compile_wiki.py --topic "AI agents"       # largest topic in the corpus (330 thoughts) — stresses big-input synthesis, most footnotes/citations
+python scripts/compile_wiki.py --person "Tammy"           # exercises compile_single_person (separate code path from topics)
+python scripts/compile_wiki.py --project "Second Brain"   # exercises compile_single_project (separate code path again)
+```
+This is deliberately not `--dry-run` — dry-run doesn't call the model at all, so it can't catch a parsing/response bug like the one that just happened. `--topic`/`--person`/`--project` are the cheap real-call path: 3 entities instead of 418.
+
+For each, verify:
+- Exits without a Python traceback or `✗` error
+- Writes to `compiled_wiki/<topics|people|projects>/<slug>.md` (confirms the `OUTPUT_DIR` fix — not the old, wrong `compiled-wiki` hyphen folder)
+- The Supabase `wiki_pages` row updates (`thought_count`, `last_compiled_at`)
+- The actual content is structurally sane on read-through — correct section headers, footnote citations resolve to real sources, no leftover raw JSON or thinking-block artifacts leaking into the markdown
+
+If all three pass, proceed to Step 3. If any fails, that's a third bug to find and fix before spending on the full run.
+
+### Step 3 — Manual one-time full correction (dev machine, watched)
 ```
 python scripts/compile_wiki.py --all
 ```
 Confirm it exits 0, DMs a completion summary (verifies the UA fix), and spot-check a couple of big movers.
 
-### Step 3 — Add the cron job
+### Step 4 — Add the cron job
 Add a 6th job to `setup_rpi.py`'s `setup_cron()` list:
 ```python
 wiki = f"{project_path}/scripts/compile_wiki.py"
 ("Weekly wiki recompile — Sunday 3am", f"0 3 * * 0   {actual_user} {python} {wiki} --all --skip-unchanged >> {log_dir}/wiki-compile.log 2>&1"),
 ```
 
-### Step 4 — Deploy to the Pi
+### Step 5 — Deploy to the Pi
 Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) to pick up the new job.
 
 ## Files touched
 
-- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1)
-- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 3)
-- No other application-code changes; `compile_wiki.py` is otherwise already cron-ready
+- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1); fix `OUTPUT_DIR`, disable thinking, robust text-block parsing (found during the failed Step 3 attempt, before this plan had a Step 2 smoke test)
+- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 4)
+- `supabase/functions/process-thought/index.ts`, `supabase/functions/generate-digest/index.ts` — same thinking/parsing fix (found same day, same root cause)
 
 ## Verify
 
 - Step 1: manual `--all` run DMs a completion summary (no 403 warning in stderr) — proves the UA fix
+- Step 2: all 3 smoke-test entities compile cleanly and land in the correct folder — proves no further Sonnet-5-migration bugs before the real spend
 - `/etc/cron.d/second-brain` on the Pi includes the new wiki job after re-running setup
 - Manually trigger the exact cron command once and confirm it exits 0, `wiki-compile.log` shows start/end timestamps and a page count (should be a near-no-op post-correction)
 - Let it fire for real on the next Sunday and confirm `wiki_pages.compiled_at` timestamps updated (only for changed pages) without manual intervention, and the completion DM arrives
@@ -88,6 +108,6 @@ Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) t
 ## Related
 
 - `wiki_implementation.md` — Follow-Up Items #3 (was BLOCKER, now resolved), #2/#11 (Discord DM 403 — closed by Step 1), Order of Operations #12
-- `compile_wiki_pagination_bug.md` (done) — its correction is what makes the manual Step 2 a real-cost one-time event
+- `compile_wiki_pagination_bug.md` (done) — its correction is what makes the manual Step 3 a real-cost one-time event
 - `CURRENT.md` — "Carried over from May" (cron location) + the deferred full-recompile note
 - `roadmap.md` — #1
