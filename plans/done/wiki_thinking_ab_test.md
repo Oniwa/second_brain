@@ -1,6 +1,29 @@
 # A/B Test: Adaptive Thinking for Wiki Synthesis
 
-**Status:** not started. Stub written 2026-07-22 after the first `--all` recompile attempt failed and thinking was disabled as the safe default across all 3 Sonnet call sites.
+**Status:** ✅ CLOSED 2026-07-24 — **decision: keep thinking disabled** across all 3 Sonnet call sites. See Conclusion.
+
+## Conclusion (2026-07-24)
+
+Tested on "AI agents" (330 thoughts, the largest/most-synthesis-heavy page). A temporary `--thinking {disabled,adaptive}` flag was added to `compile_wiki.py`, the adaptive arm run, then the flag reverted.
+
+**Result: adaptive thinking is not viable at the current `max_tokens: 8192`.** The adaptive call spent the entire 8192-token budget on the thinking block and returned **zero `text` output** — the run crashed on `No text block in response content`. Cost data made the decision one-sided:
+
+| Arm | Pages | Output | Cost |
+|---|---|---|---|
+| Disabled (smoke test) | 3 (incl. AI agents 330) | clean, cited pages | $0.52 total |
+| Adaptive, AI agents only | 1 | **crashed, no output** | **$0.81** |
+
+One adaptive call on the big page cost more than all three disabled pages combined and produced nothing; a *successful* adaptive run would cost even more (full ~6k-token page **on top of** thinking, which bills as output at $10/MTok), multiplied across all 418 pages every recompile — for an unproven quality benefit, when the disabled output is already clean and correctly cited.
+
+**Decisions:**
+- Keep `thinking: {"type": "disabled"}` hardcoded in `compile_wiki.py` `call_sonnet`; an explanatory comment now warns against enabling it without raising `max_tokens`.
+- **Removed the `--thinking` flag entirely** (rather than leaving it dormant) so thinking can't be turned on accidentally — the failure mode silently breaks the largest pages.
+- `process-thought` and `generate-digest` stay disabled too (never in scope — no reasoning benefit for classification / templated fill-in).
+- If a future model changes the economics, re-open by testing with a raised `max_tokens`, not by flipping a flag.
+
+---
+
+_Original stub (2026-07-22) below for context._
 
 ## Context
 
