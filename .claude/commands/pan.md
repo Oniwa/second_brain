@@ -25,15 +25,14 @@ If the transcript fetch fails (video unavailable, transcripts disabled, IP block
 
 Before Phase 1, check whether this source has already been panned:
 
-**If a URL was provided:** You must be able to find prior pans from *whatever* URL the user gives you — do not assume the user will supply the companion Substack URL. A single video-URL search is not sufficient, because a batch pan often stamps the captured insights with a *companion* Substack URL and labels them under the Substack's title, so a plain video-URL search ranks the short "watch/pan this" reminder at the top and buries (or never surfaces) the real captures. Run this full lookup for **every** URL provided, with `limit: 25`:
+**If a URL was provided:** You must be able to find prior pans from *whatever* URL the user gives you. Run this lookup for **every** URL provided:
 
-1. **Direct URL search** — Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`, status `all`, limit 25). Scan **every** result's `URLs:` line for the target URL — do not stop at the top hit.
-2. **Follow the reminder's companion URL** — If any match is a reminder-style thought ("watch and pan this video"), read its full text (`get_thought`) and extract any *other* URL it references (a companion Substack/article). Run `semantic_search` on that companion URL too (status `all`, limit 25). This is usually what surfaces the real captures.
-3. **Topical fallback** — After fetching the transcript (Step 0a), derive the video's core topic/title and run a `semantic_search` (or `get_context`) on that topic. Captures that carry the URL only in the `urls[]` field but rank poorly against the raw URL string will surface here.
+1. **Authoritative URL lookup** — Call `find_by_url` with the URL (it defaults to status `all`). This is deterministic and URL-form-agnostic: YouTube links resolve to their video ID so `youtu.be`, `watch?v=`, `?si=` tracking, `shorts`, and `embed` forms all unify; other URLs match on host+path. It returns hits **grouped by source label with counts**, flagging any source that holds active `insight` captures (the "likely already panned" signal). This replaces the old fuzzy `semantic_search`-on-the-URL-string dance — you no longer need to hand-chase companion Substack URLs, because passing *each* URL the user gave you to `find_by_url` finds them directly.
+2. **Topical fallback** — After fetching the transcript (Step 0a), derive the video's core topic/title and run a `semantic_search` (or `get_context`) on that topic. This is the secondary net: it catches captures that reference the source *conceptually* but carry no URL in their `urls[]` field, which `find_by_url` structurally cannot find.
 
-**Do not conclude "not yet panned" until all three lookups come up empty.** A reminder thought referencing the URL is *not* evidence the source is unpanned — it is only the to-do; the actual insights may still exist under a companion-URL/Substack label.
+**Reading the verdict:** the strongest evidence a source is already panned is a **cluster of active `insight` captures** referencing the URL (e.g. 39 insights = unmistakably panned) — *not* the presence of a reminder. A reminder thought ("watch/pan this video") is only the to-do; conversely, a source can be fully panned with **no** reminder at all (it may have been captured directly, or its reminder already archived). So judge by the insight cluster `find_by_url` reports, and only conclude "not yet panned" when both the `find_by_url` lookup and the topical fallback come up empty.
 
-When inspecting results, **match on the URL field, not just similarity rank**. For each result whose `URLs:` line contains the target URL (or that clearly covers the same content), note its **source label** (the `Source:` line) and its `is_external` status.
+When inspecting results, note each hit's **source label** and `is_external` status — `find_by_url` already groups by source and surfaces both.
 
 If any results reference either URL, warn the user, grouped by source label with counts:
 ```

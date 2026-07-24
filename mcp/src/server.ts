@@ -557,10 +557,138 @@ async function getContext(args: { topic: string; workspace?: string }): Promise<
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
 }
 
+// ── find_by_url ───────────────────────────────────────────────────────────────
+//
+// Deterministic URL lookup. semantic_search matches meaning and is blind to URL
+// strings; this canonicalizes the caller's input into a single substring match key and
+// hands it to the find_by_url RPC (server-side literal match on urls[]). YouTube is the
+// one special case — the only major source that puts identity in the query string (?v=)
+// rather than the path — so its links resolve to the bare 11-char video ID, unifying
+// youtu.be / watch?v= / ?si= / shorts / embed forms. Every other host is path-identified,
+// so we match on host+path and drop the (tracking-only) query string and fragment.
+
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const MIN_KEY_LEN = 4;
+const YT_HOSTS = new Set(["youtube.com", "m.youtube.com", "music.youtube.com"]);
+
+// PostgREST caps responses at 1000 rows (supabase/config.toml max_rows); the RPC is
+// paginated to fetch complete result sets past that cap, aborting past the safety cap
+// rather than looping forever. Mirrors compile_wiki.py's supabase_get.
+const POSTGREST_PAGE_SIZE = 1000;
+const POSTGREST_SAFETY_CAP = 10000;
+
+function keyOrTooBroad(key: string): { key: string } | { error: string } {
+  const k = key.trim();
+  if (k.length < MIN_KEY_LEN) {
+    return { error: `Query too broad — match key "${k}" is under ${MIN_KEY_LEN} chars. Provide a fuller URL or a bare 11-char video ID.` };
+  }
+  return { key: k };
+}
+
+function canonicalizeUrlKey(input: string): { key: string } | { error: string } {
+  const raw = input.trim();
+  if (!raw) return { error: "Empty url." };
+
+  // Bare 11-char YouTube ID (no scheme/host) — use directly as the match key.
+  if (YT_ID_RE.test(raw)) return { key: raw };
+
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
+  } catch {
+    parsed = null;
+  }
+
+  if (parsed) {
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "youtu.be") {
+      const id = parsed.pathname.replace(/^\/+/, "").split("/")[0];
+      if (id) return keyOrTooBroad(id);
+    }
+    if (YT_HOSTS.has(host)) {
+      const v = parsed.searchParams.get("v");
+      if (v) return keyOrTooBroad(v);
+      const m = parsed.pathname.match(/\/(?:embed|shorts|live|v)\/([^/?#]+)/);
+      if (m) return keyOrTooBroad(m[1]);
+    }
+    // Non-YouTube: identity is the path. Match on host+path, dropping query + fragment.
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return keyOrTooBroad(`${host}${path}`);
+  }
+
+  // Not URL-parseable and not a bare ID — fall back to the literal string as the key.
+  return keyOrTooBroad(raw);
+}
+
+async function findByUrl(args: {
+  url: string;
+  status?: string;
+  limit?: number;
+}): Promise<string> {
+  const canon = canonicalizeUrlKey(args.url);
+  if ("error" in canon) return canon.error;
+  const key = canon.key;
+
+  const status = args.status ?? "all";
+  const filterStatus = status === "all" ? null : status;
+  const limit = args.limit ?? 100;
+
+  // Paginate-to-exhaustion against the server-side-filtering RPC. It returns only
+  // matching rows, so pagination only engages for very broad keys (e.g. a bare domain
+  // matching every article from a source); a normal URL finishes in one page.
+  const rows: Record<string, unknown>[] = [];
+  let offset = 0;
+  while (rows.length < limit) {
+    const pageSize = Math.min(POSTGREST_PAGE_SIZE, limit - rows.length);
+    const { data, error } = await supabase.rpc("find_by_url", {
+      match_key: key,
+      filter_status: filterStatus,
+      match_limit: pageSize,
+      match_offset: offset,
+    });
+    if (error) throw new Error(`find_by_url failed: ${error.message}`);
+    const page = (data ?? []) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < pageSize) break; // exhausted
+    offset += page.length;
+    if (offset > POSTGREST_SAFETY_CAP) {
+      throw new Error(`find_by_url exceeded safety cap of ${POSTGREST_SAFETY_CAP} rows for key "${key}"`);
+    }
+  }
+
+  const statusLabel = status === "all" ? "" : ` · status: ${status}`;
+  if (rows.length === 0) {
+    return `No thoughts reference \`${key}\`${statusLabel}.`;
+  }
+
+  // Group by source label — the dedup verdict is "which sources already hold this URL,
+  // and do they include real insight captures (not just a reminder)?"
+  const bySource = new Map<string, Record<string, unknown>[]>();
+  for (const t of rows) {
+    const src = (t.source as string) ?? "unknown";
+    if (!bySource.has(src)) bySource.set(src, []);
+    bySource.get(src)!.push(t);
+  }
+
+  const header = `**${rows.length} thought(s) across ${bySource.size} source(s) reference \`${key}\`**${statusLabel}`;
+  const blocks = [...bySource.entries()].map(([src, group]) => {
+    const activeInsights = group.filter(
+      (t) => t.status === "active" && t.category === "insight",
+    ).length;
+    const signal = activeInsights > 0 ? ` · ${activeInsights} active insight(s) — likely already panned` : "";
+    const rowsText = group
+      .map((t) => `${formatThought(t)}\nStatus: ${t.status}${t.is_external ? " · External" : ""}`)
+      .join("\n\n");
+    return `### ${src} — ${group.length} thought(s)${signal}\n\n${rowsText}`;
+  });
+
+  return [header, "", ...blocks].join("\n\n").trimEnd();
+}
+
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.5.0" },
+  { name: "second-brain", version: "1.6.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -737,6 +865,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "find_by_url",
+      description: "Deterministically find every thought that references a given URL (or bare 11-char YouTube video ID). Unlike semantic_search (meaning-based, blind to URL strings), this matches on the urls[] field: YouTube links resolve to their video ID so youtu.be, watch?v=, ?si= tracking, shorts, and embed forms all unify to the same source; other URLs match on host+path with query/tracking params ignored. Use this as the authoritative dedup check before panning a source. Defaults to status 'all' so already-archived reminders — the strongest 'already panned' signal — are included.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "A URL, or a bare 11-char YouTube video ID. youtu.be / youtube.com / m. / music. / shorts / embed / live forms all work; non-YouTube URLs match on host+path." },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: all — includes archived reminders)",
+          },
+          limit: { type: "number", description: "Max rows to return (default 100). Paginates internally; a bare domain can match many." },
+        },
+        required: ["url"],
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -801,6 +946,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "meeting_prep":
         text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);
+        break;
+      case "find_by_url":
+        text = await findByUrl(a as Parameters<typeof findByUrl>[0]);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
