@@ -95,6 +95,10 @@ Grounded against the live DB: `urls[]` stores URLs **raw, exactly as extracted**
 
 **Phase:** 4 (higher priority — fixes an active, recurring correctness bug in pan dedup)
 
+**Resolution (2026-07-24) — shipped.** Built exactly as the resolved design above. Migration `009_find_by_url.sql` (RPC applied to the live project) does a server-side, case-insensitive **literal** substring match (`strpos` over `unnest(urls)` — chosen over `ILIKE` so a `_`/`%` in a video ID or slug can't act as a wildcard), deterministic order for stable pagination, seq scan accepted (the `thoughts_urls_gin` `@>` index can't serve it; sub-ms at ~1.9k rows). `mcp/src/server.ts` adds the `find_by_url` tool (server → 1.6.0): canonicalizes in TS (YouTube → 11-char video ID unifying youtu.be / watch?v= / ?si= / shorts / embed / live; other hosts → host+path, query/fragment stripped), accepts full URLs / bare IDs / bare domains, rejects <4-char keys, paginates-to-exhaustion internally (mirrors `compile_wiki.py` `supabase_get`, 10k safety cap), groups output by source with an active-`insight` "already panned" signal, defaults `status=all`. `.claude/commands/pan.md` Step 0b rewired: `find_by_url` is now the authoritative check (part 1), the companion-URL hop is retired, the topical fallback is kept as the secondary net (part 2), and the "already panned" verdict is judged by the active-insight cluster rather than a reminder.
+
+Verified against `execute_sql` ground truth: `iUSdS-6uwr4` → 39, `jwtpMSRAPAQ` → 35 all / 34 active / 1 archived, substack host+path → 26, bare domain → 532, pagination offset correct; the TS canonicalizer unifies every URL form (youtu.be, ?si=, watch?v=, &t=, shorts, substack ?r=) and the min-length/garbage guards fire. Commits `d0d77b3` (impl) + `b4ac6fc` (resolved design). Confirmed during implementation: not every panned source has a reminder to archive (e.g. `iUSdS-6uwr4` = 39 insights, 0 reminder), which is why the dedup verdict keys on the insight cluster.
+
 ---
 
 ## 5. Pan Queue Visibility (Discord-captured videos as a first-class queue)
