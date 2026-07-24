@@ -9,7 +9,7 @@ mcp/node_modules/
 mcp/dist/
 credentials.json
 token.json
-compiled-wiki/
+compiled_wiki/
 dashboard/config.js
 __pycache__/
 *.pyc

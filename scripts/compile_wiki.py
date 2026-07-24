@@ -352,6 +352,9 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
     body = json.dumps({
         "model": SONNET_MODEL,
         "max_tokens": 8192,
+        # Thinking stays disabled: adaptive thinking exhausts max_tokens on the
+        # largest pages and returns zero text (A/B tested 2026-07-24, see
+        # plans/done/wiki_thinking_ab_test.md). Do not enable without raising max_tokens.
         "thinking": {"type": "disabled"},
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_content}],

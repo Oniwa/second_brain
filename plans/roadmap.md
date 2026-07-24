@@ -13,7 +13,7 @@ _Ranked 2026-07-20, updated 2026-07-21._ This is the priority ordering for `plan
 ## 1. Wire up weekly wiki compile cron
 `plans/in_progress/wiki_weekly_cron.md`
 
-Location/schedule decided and Steps 1 + 3 shipped. First real `--all` correction attempted 2026-07-22 and failed (1/418 pages) — two bugs found and fixed (output-dir mismatch, Sonnet 5 adaptive-thinking-on-by-default breaking response parsing). Not yet re-run — see `plans/in_progress/wiki_thinking_ab_test.md` (new, small stub) for the one open decision blocking a clean re-run: whether wiki synthesis should actually use adaptive thinking, not yet tested either way.
+Location/schedule decided and Steps 1 + 3 shipped. First real `--all` correction attempted 2026-07-22 and failed (1/418 pages) — two bugs found and fixed (output-dir mismatch, Sonnet 5 adaptive-thinking-on-by-default breaking response parsing). Now unblocked: the adaptive-thinking question was A/B tested and closed as keep-disabled (`plans/done/wiki_thinking_ab_test.md`), the Linux `compiled_wiki` repo is cloned, and the Step 2 smoke test passed. Remaining: run the full `--all` correction (watched, ~$15–25), then Step 5 (Pi deploy).
 
 ## 2. Wiki-first routing + automemory bridge
 `plans/in_progress/wiki_routing_and_automemory_bridge.md`
