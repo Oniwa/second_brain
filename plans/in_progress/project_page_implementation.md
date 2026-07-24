@@ -324,3 +324,39 @@ people_aliases, topic_aliases, project_defs = load_aliases()
 - Pan skill changes — forward capture relies on topic classifier; project thoughts are mainly from in-project sessions and recap skill
 - MCP server changes — existing tools handle all entity types
 - Updating `CURRENT.md` and `wiki_implementation.md` — do after implementation
+
+---
+
+## Follow-up (proposed 2026-07-24): workspace-hybrid project scoping — NEEDS GRILL-ME
+
+**Status:** not started. Surfaced when asking why the agile-backlog project has no wiki page (it's simply not in `project_definitions.json`), which exposed that the anchor-topics grouping mechanism **predates the `workspace` field** (shipped 2026-07-10, `plans/done/project_scoping_field.md`). We now have two overlapping ways to say "this thought belongs to project X," and neither alone is complete.
+
+### The finding (measured on the agile-backlog project)
+
+Using workspace `agile_backlog_builder` vs a distinctive anchor-topic set (`MIS_agile_backlog_builder`, `Epic Validator`, `AIExecutionLog`, `ADO Publish`, `ADO Publish flow`, `agile backlog`, `Create Epic topic`):
+
+| Scoping | Active thoughts |
+|---|---|
+| Anchor topics only (current mechanism) | 20 — misses **6** workspace-tagged thoughts the classifier tagged differently |
+| Workspace only | 15 — misses **11** topic-matching thoughts, mostly **historical/null-workspace** (captured before the field existed or from other contexts) |
+| Overlap (both) | 9 |
+| **Union (workspace OR topics)** | **26** |
+
+Takeaway: **workspace alone would lose the 11 historical thoughts; topics alone lose the 6 recent ones.** A hybrid captures the full 26 and is future-proof — new captures land via workspace automatically, history stays covered by topics, and the anchor-topics list matters less over time.
+
+### Proposed change
+
+Make project matching a **union: `workspace == <slug>` OR `topics ∩ anchor_topics`.**
+
+- **`project_definitions.json` schema:** each project becomes `{ "workspace": "<slug>", "topics": [...] }` instead of a bare topic list (or add an optional `workspace` key). Must stay backward-compatible with the existing bare-list entries, or migrate all five.
+- **`compile_wiki.py`:** `fetch_thoughts_for_project()` and `get_qualifying_projects()` union the workspace filter with the existing topic-intersection filter (dedupe by id).
+- Improves the **five existing** projects too (ABUCW↔`abucw`, Second Brain↔`second_brain`, Meal Planner↔`meal_planner`, etc.).
+- **First consumer:** adds the **MIS Agile Backlog Builder** project (the trigger for this) — deferred until the hybrid lands so it gets the full 26-thought scoping rather than the topic-only 20.
+
+### Open questions for grill-me
+
+- Schema shape: extend each entry to `{workspace, topics}` vs add an optional `workspace` key while keeping bare-list support — how much backward-compat vs one-time migration of the five.
+- Should a project be definable by **workspace alone** (no anchor topics), for clean new projects where the workspace is authoritative?
+- Does the workspace-vs-topic union change the multi-project-membership semantics (a thought could now match project A by workspace and project B by topic)?
+- Alias interplay: workspace slugs are deterministic (git-toplevel / `.workspace` / cwd), topics go through the alias/canonicalization layer — confirm no double-count after dedup.
+- Threshold (≥2) unchanged? Union raises counts, so a few borderline projects might newly qualify — check the dry-run `get_unmatched_project_thoughts` output after.
