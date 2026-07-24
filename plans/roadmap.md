@@ -13,7 +13,7 @@ _Ranked 2026-07-20, updated 2026-07-21._ This is the priority ordering for `plan
 ## 1. Wire up weekly wiki compile cron
 `plans/in_progress/wiki_weekly_cron.md`
 
-Location/schedule decided and Steps 1 + 3 shipped. First real `--all` correction attempted 2026-07-22 and failed (1/418 pages) — two bugs found and fixed (output-dir mismatch, Sonnet 5 adaptive-thinking-on-by-default breaking response parsing). Now unblocked: the adaptive-thinking question was A/B tested and closed as keep-disabled (`plans/done/wiki_thinking_ab_test.md`), the Linux `compiled_wiki` repo is cloned, and the Step 2 smoke test passed. Remaining: run the full `--all` correction (watched, ~$15–25), then Step 5 (Pi deploy).
+Nearly done. Location/schedule decided, Steps 1–4 shipped, and the one-time full `--all` correction **completed 2026-07-24** (418 pages, 202m, 0 errors, $19.32; wiki grew 154→418, mirror pushed as `compiled_wiki` `6990c46`, completion Discord DM confirmed the UA-header fix). The adaptive-thinking question was A/B tested and closed as keep-disabled (`plans/done/wiki_thinking_ab_test.md`). **Only Step 5 remains:** re-run `setup_rpi.py` on the Pi to activate the already-added weekly cron — needs physical Pi access.
 
 ## 2. Wiki-first routing + automemory bridge
 `plans/in_progress/wiki_routing_and_automemory_bridge.md`
