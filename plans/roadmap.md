@@ -21,57 +21,52 @@ Nearly done. Location/schedule decided, Steps 1–4 shipped, and the one-time fu
 
 Makes `get_context` surface compiled wiki knowledge instead of raw thought dumps, and pipes Claude Code's own auto-memory into the searchable brain. Compounds every session.
 
-## 3. AI token / cost tracker
+## 3. AI token / cost tracker (+ token burn dashboard)
 `plans/in_progress/ai_token_tracker.md`
 
-Zero cost visibility exists today across 6 LLM/embedding call sites. Also unblocks the Phase 2 contradiction-detection cost cap already assumed in `wiki_implementation.md`.
+Zero cost visibility exists today across 6 LLM/embedding call sites. Two phases in one plan: **Phase 1** instrumentation (`api_usage_log` table, pricing table, per-call logging) — also unblocks the Phase 2 contradiction-detection cost cap already assumed in `wiki_implementation.md`; **Phase 2** the Token Burn Dashboard (Nate B. Jones' framework — fidelity-labeled measurement table, cost-per-work-unit views, Tufte-clean charts, and a `/token-review` weekly-ritual skill). Phase 2's `/token-review` skill can ship the moment Phase 1 data exists, before any dashboard HTML.
 
-## 4. Token burn dashboard (presentation + review ritual)
-`plans/in_progress/token_burn_dashboard.md`
-
-The payoff layer for #3: Nate B. Jones' "Token Burn Dashboard" framework — a fidelity-labeled measurement table, cost-per-work-unit views, Tufte-clean charts on the existing dashboard, and a `/token-review` weekly-ritual skill that turns raw cost rows into "what should become a workflow next week." **Depends on #3** (needs `api_usage_log` data) — ranked directly beneath it as the pair. Design not scoped; open question of whether it's a separate plan or Phase 2 of #3.
-
-## 5. Proactive resurfacing of external insights
+## 4. Proactive resurfacing of external insights
 `plans/in_progress/open_brain_improvements.md` (bottom stub)
 
 Closes the biggest identified conceptual gap — retrieval/synthesis is entirely pull-based today. Design is agreed (relevance-linked, ~60% floor, one/day) but not implementation-ready.
 
-## 6. Pan queue visibility — remainder
+## 5. Pan queue visibility — remainder
 `plans/in_progress/mcp_improvements.md` §5 (items #1 + #3)
 
 Discord-captured "pan this" videos still pile up invisibly. The query primitive shipped (`--pending-pans`/`get_pans`, 2026-07-11) and now `find_by_url` (§4, done 2026-07-24) supplies the canonical-URL infra these share. Two durable pieces remain: **#1** first-class `pan_status: open` tag at capture time (structural root fix), and **#3** an "🎬 Open pans (N)" section in the daily/weekly digest (passive recurring visibility). Scoped, proven-need, reuses just-built infra — the natural continuation of the find_by_url work.
 
-## 7. Digest backlog filter
+## 6. Digest backlog filter
 `plans/in_progress/digest_backlog_filter.md`
 
 Fixes recap open-threads getting misclassified as urgent Top-3 actions. Chronic but tolerable — user already tunes around it manually. Design not finalized.
 
-## 8. Dashboard improvements (remaining phases)
+## 7. Dashboard improvements (remaining phases)
 `plans/in_progress/dashboard_improvements_plan.md`
 
 Mostly shipped. Remaining: inline `raw_text` edit in `audit.html`, Top 10 People chart, Wiki Pages tab.
 
-## 9. Dashboard audit page (remaining phase 2)
+## 8. Dashboard audit page (remaining phase 2)
 `plans/in_progress/dashboard_audit_plan.md`
 
-Phase 1 fully shipped. Phase 2 (inline edit) overlaps with #8's remaining item — same piece of work, tracked in two plans.
+Phase 1 fully shipped. Phase 2 (inline edit) overlaps with #7's remaining item — same piece of work, tracked in two plans.
 
-## 10. Project pages
+## 9. Project pages
 `plans/in_progress/project_page_implementation.md`
 
 Already built and working. Was blocked on the pagination bug — now unblocked (see Done above).
 
-## 11. Cross-tool skill sync
+## 10. Cross-tool skill sync
 `plans/in_progress/cross_tool_skill_sync.md`
 
 Windows/Copilot CLI parity for `grill-me`/`recap`. Doesn't touch retrieval or data quality — quality-of-life for a secondary environment.
 
-## 12. Recall-before-work skill
+## 11. Recall-before-work skill
 `plans/in_progress/recall_before_work_skill.md`
 
 Its own write-up says it automates something the user already does well manually — lowest marginal value of the open stubs.
 
-## 13. MCP inferential/context tools (exploratory, Phase 5)
+## 12. MCP inferential/context tools (exploratory, Phase 5)
 `plans/in_progress/mcp_improvements.md` §1–3
 
 Three Karpathy-wiki-inspired ideas, none scoped past a stub: **§1 `get_gaps`** (a tool that infers what knowledge/decisions the brain's goals imply but are missing — distinct from `get_context`'s retrieval), **§2 `skill`/persona thought category** (thoughts that influence AI responses instead of surfacing in search, injected into every `get_context`), and **§3 audit-history surfacing** (a review task: check whether `get_context`/`meeting_prep` exploit full capture history/recency, not just point-in-time semantic retrieval). Lowest marginal value / highest design uncertainty — all Phase 5.
@@ -81,4 +76,4 @@ Three Karpathy-wiki-inspired ideas, none scoped past a stub: **§1 `get_gaps`** 
 ## Not ranked here
 
 - `wiki_implementation.md` — the wiki MVP itself is shipped; its own remaining follow-ups are individually represented above (#1) or deferred to a later Phase 2 (contradiction detection / typed edges, not yet its own plan).
-- `mcp_improvements.md` §4 (`find_by_url`, done) and §6 (`get_stats` cap, done) — shipped; the file's still-open items are ranked at #6 and #13 above.
+- `mcp_improvements.md` §4 (`find_by_url`, done) and §6 (`get_stats` cap, done) — shipped; the file's still-open items are ranked at #5 and #12 above.
