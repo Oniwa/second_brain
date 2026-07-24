@@ -27,19 +27,25 @@ Two independent fixes surfaced by comparing the second-brain architecture agains
 
 **Direction — one-way, automemory → thoughts.** Not the reverse. The second-brain is the deep store; `MEMORY.md` should stay a lightweight session index, not balloon with everything already in the brain.
 
+**Design decision (2026-07-24) — platform-agnostic / multi-source.** The user runs **both Claude Code (Linux home) and GitHub Copilot CLI (Windows work PC)**, each with its own agent memory store. Build the bridge **source-agnostic from the start** so a second tool is "add a directory + an adapter," not a rewrite:
+- The script scans a **list** of memory sources, each defined by `{ path, source_tag, adapter }` — e.g. `automemory-claude`, `automemory-copilot`.
+- A per-source **parser adapter** normalizes that tool's memory format into the common shape (name, description, body, type). Claude Code's is per-file YAML frontmatter; Copilot's format is **unconfirmed** (see coupling below).
+- Dedup state is keyed by **`(source_tag, name)`**, not `name` alone, so the two stores never collide.
+- **Implement the Claude Code arm now** (fully unblocked on this machine). **Defer the Copilot arm** — it's coupled to roadmap #10 (`cross_tool_skill_sync.md`) on three unknowns that can only be resolved from the work PC: (a) the two memory stores live on **different machines**, so the sync must run where each memory lives and each machine must reach Supabase (work-PC reachability is #10's open question); (b) Copilot CLI's memory **file format/location** is unconfirmed (same `.copilot/` layout question as #10); (c) the `/recap` trigger is per-tool — Copilot's recap must exist on Windows to fire its sync, which depends on #10's cross-tool recap sync landing.
+
 **Approach — new sync script, `scripts/sync_automemory.py`:**
-1. Read every `*.md` file in the memory directory except `MEMORY.md` itself.
-2. Parse YAML frontmatter (`name`, `description`, `metadata.type`).
-3. Compute a SHA-256 fingerprint of the body; keep a small local state file (gitignored, e.g. `.automemory_sync_state.json`) mapping `name → last-synced fingerprint` so unchanged memories are skipped on repeat runs.
+1. For each configured memory source, read every `*.md` file in its directory except the index file (`MEMORY.md` for the Claude source), and run it through that source's adapter.
+2. Adapter parses the memory format into the common shape — for Claude Code: YAML frontmatter (`name`, `description`, `metadata.type`).
+3. Compute a SHA-256 fingerprint of the body; keep a small local state file (gitignored, e.g. `.automemory_sync_state.json`) mapping `(source_tag, name) → last-synced fingerprint` so unchanged memories are skipped on repeat runs.
 4. For new/changed memories, call the existing `process-thought` pipeline (same path `brain.py` capture uses) with:
    - `raw_text` = frontmatter description + body
-   - `source = "automemory"`
-   - a fixed `topics` tag `automemory` added post-classification so these stay filterable/excludable
+   - `source = "<source_tag>"` (e.g. `automemory-claude`, `automemory-copilot`)
+   - a fixed `topics` tag `automemory` added post-classification so these stay filterable/excludable across all sources
    - category mapping: `project→project`, `feedback→insight`, `reference→admin`, `user→insight`
 
-**Trigger:** piggyback on the existing `/recap` skill (already runs at end-of-session and already writes to the brain) rather than adding a new cron job — call the sync script as a step in `/recap` so it's automatic on a cadence already in use.
+**Trigger:** piggyback on the existing `/recap` skill (already runs at end-of-session and already writes to the brain) rather than adding a new cron job — call the sync script as a step in `/recap` so it's automatic on a cadence already in use. Each tool's own recap syncs its own local memory source (the Copilot arm rides #10's cross-tool recap sync).
 
-**Files touched:** new `scripts/sync_automemory.py`, new gitignored state file, small addition to `.claude/commands/recap.md` to invoke it.
+**Files touched:** new `scripts/sync_automemory.py` (with the source-config table), new gitignored state file, small addition to `.claude/commands/recap.md` to invoke it. (Copilot adapter + its recap hook land later, with #10.)
 
 **Verify:** run the script once manually against the current memory dir, confirm exactly one thought appears via `list_recent`, tagged `automemory`; run it again immediately and confirm zero new captures (fingerprint dedup working).
 
