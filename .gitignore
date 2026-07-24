@@ -13,3 +13,4 @@ compiled_wiki/
 dashboard/config.js
 __pycache__/
 *.pyc
+.idea/
