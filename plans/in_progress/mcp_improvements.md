@@ -50,15 +50,48 @@ Karpathy's log.md mechanism works because the AI reads the *history of interacti
 
 This is the root cause of the recurring pan-dedup blind spot: sources that were already fully panned (jwtpMSRAPAQ, ltbzgzZZmgI, l8BloTSLK6M, n0nC1kmztSk, UsCgEuIAclE) all initially looked "unpanned" on a URL search. The `/pan` skill currently works around this with a 3-part lookup (direct URL → follow reminder's companion URL → topical fallback), but that's fuzzy and depends on guessing the topic.
 
-**Fix:** Add a deterministic exact/substring lookup on the `urls[]` field so a single call reliably returns every thought referencing a URL.
+**Fix:** Add a deterministic substring lookup on the `urls[]` field so a single call reliably returns every thought referencing a URL, tolerant of the URL-form heterogeneity that actually exists in the corpus.
 
-**Possible interface:**
-```
-find_by_url(url: string, status?: active|archived|all) → thoughts whose urls[] contains url
-```
-Implementation: DB-level `WHERE urls @> ARRAY[url]` for exact match, or `ILIKE '%<videoID>%'` across the `urls[]` field to tolerate tracking-param differences (`?si=`, `?is=`) and youtu.be vs youtube.com/watch forms. Normalize/canonicalize URLs (strip query params, unify host) before matching.
+---
 
-**Downstream:** Once available, simplify `/pan` Step 0b to call `find_by_url` first as the authoritative dedup check, keeping the topical fallback only as a secondary net.
+### Resolved design (grilled 2026-07-24)
+
+Grounded against the live DB: `urls[]` stores URLs **raw, exactly as extracted** (no canonicalization at capture, see `process-thought/index.ts` `extractUrls`). The same video therefore lives under `youtu.be/<id>`, `youtube.com/watch?v=<id>`, and forms with `?si=` tracking params. That heterogeneity — not the absence of a lookup — is the real failure mode, so a plain exact `@>` match would silently reproduce the dedup blind spot. Corpus at grill time: 1,300 YouTube / 544 Substack / rest a long tail of blogs; max any single video ID appears is 39 rows.
+
+**Signature:** `find_by_url(url: string, status?: active|archived|all, limit?: number)` → thoughts referencing the URL, grouped by source.
+
+**1. Matching — canonicalize in TS, match in SQL.**
+- **YouTube** (`youtube.com`/`youtu.be`): extract the 11-char video ID (from the `v=` param or the `youtu.be/<id>` path), match `%<id>%`. Unifies `youtu.be` ↔ `watch?v=` ↔ `?si=` variants — the actual bug.
+- **Everything else** (Substack, blogs — identity lives in the **path**): lowercase host, strip scheme + `www.` + query string + fragment, match `%<host+path>%`. Query strings (`?utm_*`, Substack `?r=`, `?si=`) are pure tracking noise. Corpus confirms non-YouTube URLs are path-identified and stored clean (e.g. `natesnewsletter.substack.com/p/<slug>`).
+- **YouTube is the one special case** precisely because it's the only major source that puts identity in the query string rather than the path.
+
+**2. Input — accept three shapes.**
+- Full URL (either YouTube form) · bare 11-char ID (`^[A-Za-z0-9_-]{11}$` → treat as a YouTube ID directly) · bare `host/path` · else fall back to treating the raw string as a literal substring key.
+- **Min-length guard:** resulting match key < ~4 chars → return `"query too broad"` rather than substring-scanning the whole table.
+- **Bare-domain input** (e.g. `natesnewsletter.substack.com`) intentionally matches **every** thought from that host — kept as a feature ("everything from this source"), bounded by `limit` + pagination.
+
+**3. Query architecture — filter server-side.**
+- New SQL RPC filters in the DB: `WHERE EXISTS (SELECT 1 FROM unnest(t.urls) e WHERE e ILIKE '%' || key || '%')`, returning only matches. TS does the canonicalization and passes a clean key; SQL does the match. Keeps URL-parsing in readable TypeScript, not gnarly `regexp_replace`.
+- **Sequential scan accepted** (no new index): the existing `thoughts_urls_gin` (migration 002) serves only array containment `@>`, not `ILIKE` over `unnest(urls)`. At ~1,856 rows a seq scan is sub-millisecond; a trigram index is unwarranted at this size. Note in migration.
+- **`limit` default 100, internal paginate-to-exhaustion** using the proven `compile_wiki.py:274` `_fetch_all` offset/limit pattern (`POSTGREST_PAGE_SIZE = 1000` + safety cap), ported to TS — this is the codebase's *first* TS pagination loop (the `getStats` fix sidestepped pagination via count-only queries). Only the bare-domain case ever needs more than one page today.
+
+**4. Status default = `all`** (not `active` like the other tools).
+- A URL match is already narrow and unambiguous, so there's no noise cost to showing everything. More importantly, the only row that ever gets archived is the **retired reminder** (`pan.md:246` forbids archiving insight thoughts) — and an archived reminder is the single cleanest "already panned *and closed*" signal in the system. Defaulting to `active` would hide exactly that, losing the distinction between "never queued" and "queued and completed."
+
+**5. Output.** Same row shape as `list_recent`/`get_needs_review` (`id, title, source, status, category, is_external, created_at` + the matched `urls[]` line), sorted by source label then recency, led by a `**N thought(s) across M source(s) reference <canonical-key>**` header so the dedup verdict is readable at a glance. Serves `/pan` Step 0b's group-by-source-with-counts need directly (`pan.md:36-40`).
+
+**6. Downstream — rewire `/pan` Step 0b in this same change.**
+- Replace **part 1** (direct URL `semantic_search`) → a single `find_by_url` call per provided URL. Run it on *every* URL the user supplies.
+- **Retire part 2** (follow-the-companion-URL hop) — it was a workaround for exact-match blindness; with ID/path canonicalization, both the video URL and its companion Substack URL are directly findable by passing each to `find_by_url`.
+- **Keep part 3** (topical fallback) as the secondary net — it catches thoughts that reference a source *conceptually* without carrying its URL, which `find_by_url` structurally cannot find.
+- **Verdict update:** treat a **cluster of active `insight` captures** as "already panned," not just a retired reminder. Proven during the grill: `iUSdS-6uwr4` has **39 active insights and 0 reminder** — it was panned directly with no reminder ever created, so "an archived reminder exists" is *not* a reliable dedup signal on its own.
+
+**Files to change:**
+| File | Action |
+|------|--------|
+| `supabase/migrations/009_find_by_url.sql` | NEW — RPC that canonical-key-filters `urls[]` server-side (seq scan, documented) |
+| `mcp/src/server.ts` | MODIFY — `find_by_url` tool: TS canonicalizer (YT ID / host+path), min-length guard, internal paginate-to-exhaustion, grouped output |
+| `.claude/commands/pan.md` | MODIFY — Step 0b rewrite (part 1 → `find_by_url`, retire part 2, keep part 3, insight-cluster verdict) |
 
 **Phase:** 4 (higher priority — fixes an active, recurring correctness bug in pan dedup)
 
