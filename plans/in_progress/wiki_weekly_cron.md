@@ -1,6 +1,6 @@
 # Wire Up Weekly Wiki Compile Cron
 
-**Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started.
+**Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started. **Step 6 (git-publish the compiled mirror) added 2026-07-24 — not started; see below. Without it the cron regenerates pages only on the Pi's local disk and the `Oniwa/compiled_wiki` GitHub mirror silently goes stale.**
 
 ## Update — 2026-07-22: first `--all` attempt failed, root causes fixed, not yet re-run
 
@@ -91,10 +91,33 @@ wiki = f"{project_path}/scripts/compile_wiki.py"
 ### Step 5 — Deploy to the Pi
 Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) to pick up the new job.
 
+**Prerequisite for Step 6 — confirm the wiki repo exists on the Pi (added 2026-07-24).** The compiled markdown lives in a **separate git repo** at `compiled_wiki/` (remote `https://github.com/Oniwa/compiled_wiki.git`, its own `.git`, gitignored by the parent — *not* a submodule, so a `second_brain` clone does **not** bring it along). Before the git-publish step can work on the Pi, verify:
+- `compiled_wiki/` is cloned as a sibling of `scripts/` inside the Pi's `second_brain` checkout (same layout as dev). If missing, `git clone https://github.com/Oniwa/compiled_wiki.git compiled_wiki` there. (This is the same "confirm `compiled_wiki` resolves on Linux" check the 2026-07-22 update already flagged for the compile step — Step 6 makes it a hard requirement, not just a nicety.)
+- Its remote/branch are correct (`git -C compiled_wiki remote -v`, `git -C compiled_wiki branch`).
+- **Non-interactive push auth is configured** (see Step 6 — this is the real blocker, cron has no TTY).
+
+### Step 6 — Commit & push the compiled_wiki mirror (git-publish)
+The cron regenerates markdown into `compiled_wiki/` but nothing publishes it — `compile_wiki.py` has zero git logic today. Add a publish step so the weekly run's output reaches GitHub.
+
+**Where the logic lives (leaning, confirm in a short grill):** a `--git-publish` flag on `compile_wiki.py` rather than chaining shell in the cron line — the script already knows the compiled/skipped counts and exit status, so it can build a meaningful commit message and only publish on a clean (exit-0) run. After a successful `--all`, when `--git-publish` is set:
+1. **Only if something changed** — guard on `git -C compiled_wiki status --porcelain`; if empty, skip (no empty commits on weeks where `--skip-unchanged` touched nothing).
+2. `git -C compiled_wiki add -A`
+3. `git -C compiled_wiki commit -m "Weekly wiki recompile {DATE} — {N} page(s) updated"` (mirror the Discord DM's counts).
+4. `git -C compiled_wiki push`
+5. **Report push success/failure in the completion Discord DM** (extend `_build_dm`), so an auth/network failure surfaces instead of dying silently in the log. A push failure should not crash the run — the DB is already updated; the mirror just lags a week.
+
+The Sunday cron command (Step 4) then becomes `... --all --skip-unchanged --git-publish >> …`.
+
+**Open sub-decision — non-interactive auth (the real blocker):** cron has no TTY, so `git push` must authenticate without prompting. Two options, decide before deploy:
+- **HTTPS + stored PAT** — a fine-scoped (`repo` on `compiled_wiki` only) personal access token in the Pi's git credential store (`git config credential.helper store`), or a `.netrc`. Simple; token needs periodic rotation.
+- **SSH deploy key** — a per-Pi deploy key with write access added to the `compiled_wiki` repo, remote switched to `git@github.com:...`. No expiry, revocable per-device; slightly more setup.
+
+Lean SSH deploy key (no rotation, device-scoped), but this is a genuine choice — grill briefly. Whichever is chosen, it's a one-time Pi setup folded into Step 5.
+
 ## Files touched
 
-- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1); fix `OUTPUT_DIR`, disable thinking, robust text-block parsing (found during the failed Step 3 attempt, before this plan had a Step 2 smoke test)
-- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 4)
+- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1); fix `OUTPUT_DIR`, disable thinking, robust text-block parsing (found during the failed Step 3 attempt, before this plan had a Step 2 smoke test); **add `--git-publish` (commit+push `compiled_wiki`, only-if-changed, report in DM) — Step 6**
+- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 4); **cron command gains `--git-publish`; Pi setup must ensure `compiled_wiki` is cloned + push auth configured — Steps 5/6**
 - `supabase/functions/process-thought/index.ts`, `supabase/functions/generate-digest/index.ts` — same thinking/parsing fix (found same day, same root cause)
 
 ## Verify
@@ -104,6 +127,7 @@ Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) t
 - `/etc/cron.d/second-brain` on the Pi includes the new wiki job after re-running setup
 - Manually trigger the exact cron command once and confirm it exits 0, `wiki-compile.log` shows start/end timestamps and a page count (should be a near-no-op post-correction)
 - Let it fire for real on the next Sunday and confirm `wiki_pages.compiled_at` timestamps updated (only for changed pages) without manual intervention, and the completion DM arrives
+- Step 6: after a run that changed ≥1 page, confirm a new commit landed on `Oniwa/compiled_wiki` on GitHub (not just the Pi's local disk) and the completion DM reports the push; after a no-op `--skip-unchanged` week, confirm **no** empty commit was created
 
 ## Related
 
