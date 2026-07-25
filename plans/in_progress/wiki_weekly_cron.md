@@ -1,6 +1,6 @@
 # Wire Up Weekly Wiki Compile Cron
 
-**Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started. **Step 6 (git-publish the compiled mirror) added 2026-07-24 — not started; see below. Without it the cron regenerates pages only on the Pi's local disk and the `Oniwa/compiled_wiki` GitHub mirror silently goes stale.**
+**Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started. **Step 6 (git-publish the compiled mirror) added 2026-07-24 — not started, and must be grilled before implementing (see the ⚠️ note on Step 6). Without it the cron regenerates pages only on the Pi's local disk and the `Oniwa/compiled_wiki` GitHub mirror silently goes stale.**
 
 ## Update — 2026-07-22: first `--all` attempt failed, root causes fixed, not yet re-run
 
@@ -97,6 +97,9 @@ Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) t
 - **Non-interactive push auth is configured** (see Step 6 — this is the real blocker, cron has no TTY).
 
 ### Step 6 — Commit & push the compiled_wiki mirror (git-publish)
+
+> ⚠️ **GRILL BEFORE IMPLEMENTING.** Do not build Step 6 until it has been through a `/grill-me` pass. Two things need resolving first: (a) where the git logic lives (`--git-publish` flag vs. cron shell chain vs. wrapper) and (b) the non-interactive push-auth mechanism (PAT vs. SSH deploy key). The shape below is a **proposed** starting point for that grill, not an approved spec. Same rule applies to the workspace-hybrid scoping follow-up in the project-pages plan — design first, then build.
+
 The cron regenerates markdown into `compiled_wiki/` but nothing publishes it — `compile_wiki.py` has zero git logic today. Add a publish step so the weekly run's output reaches GitHub.
 
 **Where the logic lives (leaning, confirm in a short grill):** a `--git-publish` flag on `compile_wiki.py` rather than chaining shell in the cron line — the script already knows the compiled/skipped counts and exit status, so it can build a meaningful commit message and only publish on a clean (exit-0) run. After a successful `--all`, when `--git-publish` is set:
