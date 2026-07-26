@@ -52,7 +52,7 @@ This wiki is a compiled, human-readable and AI-consumable synthesis of a persona
 |---|---|---|
 | Topic | `topics @> [name]` ≥ 3 active thoughts | `topic-{kebab}` |
 | Person | `people @> [name]` ≥ 2 active thoughts | `person-{first-last}` |
-| Project | `category = 'project'` ≥ 2 thoughts with project name | `project-{name}` |
+| Project | `workspace` (distinct value) ≥ 2 active thoughts | `project-{workspace}` |
 | Autobiography | Manual `--auto [--year N]` | `auto-{year}` |
 | Debate | ≥ 3 `contradicts` edges on topic (Phase 2) | `debate-{topic}` |
 
@@ -297,8 +297,8 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 12. ✅ Log rotation strategy — crontab redirects stdout+stderr to dated log file; `--skip-unchanged` for cron efficiency
 
 ### Project Pages (complete ✅)
-13. ✅ **Spec**: Decided on `project_definitions.json` — maps project names to anchor topic keywords; no new schema field needed
-14. ✅ **Implement**: `--project` flag + project system prompt + slug `project-{name}` in `compile_wiki.py`
+13. ✅ **Spec**: ~~Decided on `project_definitions.json` — maps project names to anchor topic keywords~~ — **superseded 2026-07-26**: anchor-topic grouping is retired. A project IS a `workspace`; projects are auto-discovered from distinct `workspace` values above threshold, and `project_definitions.json` is demoted to an optional display-name override map. See `plans/done/project_page_implementation.md`.
+14. ✅ **Implement**: `--project` flag + project system prompt in `compile_wiki.py`. **Updated 2026-07-26:** `--project` now takes a *workspace slug*, not a display name, and the slug is `project-{workspace}` — page identity derives from the workspace, never the title, so editing a display-name override can't silently fork a page.
 15. ✅ **Board Game Inventory / Meal Planner**: root cause fixed 2026-07-21 — silent 1000-row PostgREST truncation in `get_qualifying_projects` and 8 other call sites (same bug class as the `get_stats` fix, `mcp_improvements.md` §6). `supabase_get()` now paginates transparently; verified via `execute_sql` ground truth (Board Game Inventory: 3 thoughts, Meal Planner: 2 thoughts, both exact). See `plans/done/compile_wiki_pagination_bug.md`
 16. ✅ **Second Brain** (20 thoughts) and **ABUCW** (4 thoughts) pages compiled correctly
 
@@ -325,7 +325,7 @@ Source: youtube: Dan Martell - This AI System Will Make You So Smart It's Almost
 Martell makes `decisions` and `companies` first-class folders in his vault; our wiki only has topic/person/project pages. Adding them would let the brain answer "what did I decide about X, how, and what were the alternatives?" and "what do I know about company Y?" directly from a compiled page instead of re-deriving from scattered captures.
 - **Decision page** — trigger: `category = 'decision'` (or a `decisions` topic tag) ≥ 2 thoughts; slug `decision-{kebab}`. Sections: Decision / Rationale (how it was decided) / Alternatives Considered / Date & Status / Related. Aligns with Martell's "what did I decide, how, and what were the alternatives."
 - **Company page** — trigger: `companies @> [name]` or `company` topic ≥ 2 thoughts; slug `company-{name}`. Sections: Overview / Research & Competitors / Interactions / Open Threads / Related.
-- Open question: do captures already carry enough `category`/`topics` signal to detect these, or is a new classifier column / people-alias-style anchor map needed? (Mirror the `project_definitions.json` anchor approach if so.)
+- Open question: do captures already carry enough `category`/`topics` signal to detect these, or is a new classifier column / people-alias-style anchor map needed? (The `project_definitions.json` anchor approach this originally pointed at is retired as of 2026-07-26 — see `plans/done/project_page_implementation.md`; if an anchor-style map is still the right shape here, model it on the alias files rather than the old project config.)
 
 **2. Visual graph view — low-priority Phase 3, scoped as a diagnostic tool (not daily-use).**
 Obsidian's graph view "feels like a brain" but its real value for a solo user is *maintenance diagnostics*, not retrieval (semantic search + compiled pages already handle retrieval). Build it only after `thought_edges` exists and scope it to surface:
@@ -481,7 +481,7 @@ Errors:   0
 8. **Write manifest** — append phase result to `compiled-wiki/compile-manifest.json`: `{slug, entity_type, thought_count, status, compiled_at}`
 
 ### Slug normalization
-Convert entity names to URL-safe slugs:
+Convert entity names to URL-safe slugs. **Topic and person pages only as of 2026-07-26** — project slugs are derived mechanically from the workspace (`project-` + `workspace.replace("_","-")`) and never pass through this function, so a cosmetic title change cannot orphan a project page.
 - `+` → `p` (C++ → cpp, not c)
 - `#` → `sharp` (C# → csharp)
 - `.` → stripped

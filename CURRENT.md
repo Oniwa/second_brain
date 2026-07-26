@@ -1,11 +1,15 @@
 # Current Work
 
 ## Active
-**Full wiki correction complete — only Step 5 (Pi cron deploy) remains for roadmap #1.** The one-time `compile_wiki.py --all` recompile against pagination-corrected counts finished 2026-07-24 (**418 pages, 202m, 0 errors, $19.32**; the wiki grew 154→418 as the fix roughly tripled qualifying pages). Verified: Supabase 418 pages / 0 stale, local mirror 418 files, ground-truth spot-checks exact (AI agents 330, Board Game 3), and the completion **Discord DM delivered — live-confirming the User-Agent 403 fix**. Mirror committed + pushed (`compiled_wiki` `6990c46`).
+**Workspace-only project scoping shipped 2026-07-26 — roadmap #1's Step 5 (Pi cron deploy) is still the only thing blocking the weekly cron.** Project pages no longer group by anchor topics: **a project IS a `workspace`**, and projects are auto-discovered from distinct `workspace` values above threshold. That kills the original defect structurally — a project used to have no page purely because nobody had added it to `project_definitions.json`. Grilled, built, and verified in one session; plan moved to `plans/done/project_page_implementation.md`.
 
-**Last step:** re-run `setup_rpi.py` on the Pi to activate the already-added weekly cron (`0 3 * * 0 … --all --skip-unchanged`) — needs the Pi. See `plans/in_progress/wiki_weekly_cron.md` Step 5.
+**Result: 8 project pages, up from 4** — `second-brain` 58 (was 35), `abucw` 49 (was 10), plus four that had no page at all (`project-tracker` 20, `idea-center-ai-policy` 20, `agile-backlog-builder` 15, `irm-build-tools` 4), and `board-game-inventory` → `boardgame-inventory` (slug now derives from the workspace, not the title). One-time 29-row backfill (`010_workspace_backfill.sql`, idempotent). 44 pages recompiled, 387 skipped, **0 errors, 29m 9s, ~$3**; mirror pushed (`compiled_wiki` `4ef6a16`).
 
-_Also this session:_ closed the thinking A/B as keep-disabled + removed the `--thinking` flag (`plans/done/wiki_thinking_ab_test.md`); fixed the duplicate-clone confusion (deleted the stale `compiled-wiki` hyphen folder, corrected `.gitignore`); confirmed the Sonnet-5 parsing fix + edge-function redeploys (`process-thought` v14, `generate-digest` v6) held across the full run.
+**Last step for #1:** re-run `setup_rpi.py` on the Pi to activate the already-added weekly cron (`0 3 * * 0 … --all --skip-unchanged`) — needs the Pi. See `plans/in_progress/wiki_weekly_cron.md` Step 5. **Decide roadmap #7 (compile cost) before flipping it on** — the weekly run would spend ~$1.40/week on the Nate B. Jones page alone.
+
+**⚠️ Migration caveat:** `010_workspace_backfill.sql` is the canonical record of the backfill but was **not applied by the Supabase CLI** — the migration history is desynced (007–009 are live in production but recorded remotely under timestamped names), so `db push` would have re-run them. The identical effect was applied via PostgREST, verified at 29 rows and idempotent. **A future `supabase db push` will still try to apply 007–010 together** — reconcile before running it.
+
+_Also this session:_ three follow-on plans opened from what the work surfaced — the new no-workspace diagnostic found **105 project-category thoughts that reach no project page** (#3); person identity turned out to be unresolved system-wide, **117 distinct `people` values** across ~15 duplicate clusters (#5); and one page — Nate B. Jones at 905 thoughts — is **52% of compile input volume but ~96% duplication** of topic pages (#7). Also bumped `/grill-me` to Opus 5.
 
 ---
 
@@ -13,21 +17,29 @@ _Also this session:_ closed the thinking A/B as keep-disabled + removed the `--t
 
 **Priority order lives in `plans/roadmap.md`** (ranked 2026-07-20) — start from the top there when picking new work. The groupings below are by blocker type, not priority; don't treat list order in this section as sequencing.
 
-### Proven bugs (highest priority — `plans/in_progress/mcp_improvements.md`)
+### Proven bugs (highest priority)
+- **Weekly review digest truncates silently** (roadmap #2, `plans/in_progress/digest_chunking_fix.md`) — `send_discord_dm` hard-slices at 1900 chars and fires chunks with no pacing; Discord 429s the second one, `urlopen` raises, and the outer `except` swallows it *after* chunk 1 shipped. You get a review cut mid-sentence with no continuation. Gmail copy is intact. Small, high-certainty fix
+
+### Proven bugs (`plans/in_progress/mcp_improvements.md`)
 - ~~**`find_by_url` tool missing**~~ — **shipped 2026-07-24** (§4, commit `d0d77b3`): migration 009 RPC + `find_by_url` MCP tool + `/pan` Step 0b rewired. See Recently Shipped.
 - **Pan queue visibility, remainder** — §5 item 2's `--pending-pans` shipped 2026-07-11 as part of `get_pans`; the Discord `!pans` half and item #1's first-class `pan_status` field remain open (shares `find_by_url`'s canonical-URL infra — natural next pickup)
 
 ### Follow-ups from the `workspace` field (shipped 2026-07-10, `plans/done/project_scoping_field.md`)
 - **`scripts/brain.py` `--search`/`--recent` scoping** — same `workspace` filtering the MCP tools now have; deliberately deferred as lower priority in the plan
-- **`.workspace=abucw` files in ABU repos** — one-time action outside this repo, needs doing on the work machine so multi-repo ABUCW captures land on one slug
+- **`.workspace=abucw` files in ABU repos** — one-time action outside this repo, needs doing on the work machine so multi-repo ABUCW captures land on one slug. (`second_brain`, `compiled_wiki`, and `meal_planner` got theirs 2026-07-26; add one to `boardgame_inventory` on first clone)
+- **105 project thoughts with no workspace** (roadmap #3, `plans/in_progress/workspace_correction_and_diagnostic.md`) — new failure mode opened by workspace-only scoping: a thought captured outside its repo reaches no project page. `update_thought` **cannot edit `workspace` at all** today, so they're uncorrectable through any interface. Diagnostic + correction ship together; gated behind the digest-chunking fix since the report lands in the same Discord DM
 - **`is_external` mislabeling cleanup** — ~213 rows have clearly external `source` (youtube/substack/etc.) but `is_external=false`; captured as a separate non-blocking bug during the workspace work, fix is a one-line `UPDATE` plus finding the capture path that drops the flag
 - **Known gap, not a bug:** a handful of historical thoughts with generic `source` (e.g. plain `mcp`) couldn't be backfilled to a workspace and still appear in every scope — see the plan's "Known gap" note for options if this becomes annoying
 
 ### Carried over from May (still open)
 - ~~Fix `project_definitions.json` anchor topics~~ — **misdiagnosed**, corrected 2026-07-03, and the real cause (1000-row PostgREST cap) is now **fixed 2026-07-21** — see Recently Shipped
-- **Fix Discord DM 403** — root cause found 2026-07-22: `compile_wiki.py` `send_discord_dm` sends no `User-Agent`, so urllib's default UA gets 403'd (digest.py sets one and works). One-line fix, folded into the wiki_weekly_cron plan (Step 1); not yet applied
+- ~~**Fix Discord DM 403**~~ — **shipped**: the missing `User-Agent` fix went in as `wiki_weekly_cron.md` Step 1 and was live-confirmed by the 2026-07-24 completion DM
 - ~~**Decide cron location**~~ — **resolved 2026-07-22: the Pi** (same runtime deps as the existing digest/nudge/remind jobs). See `plans/in_progress/wiki_weekly_cron.md`
 - **Dashboard item 11 — inline `raw_text` edit in `audit.html`** — no longer blocked (Edge Function update-mode shipped 5/05); just needs the Phase 2 UI (`plans/in_progress/dashboard_audit_plan.md`)
+
+### Opened 2026-07-26 (need decisions, not code)
+- **Person identity unresolved system-wide** (roadmap #5, `plans/in_progress/person_identity_dedup.md`) — 117 distinct `people` values / ~15 duplicate clusters in three modes: bare-first-name collisions (`Simon` could be Scrapes *or* Willison), case variants (`Nate B. Jones` 639 · `Nate B Jones` 266), and machine identifiers (`jbarksdale`, `rduictrsvc@leggett.com`). Critically, `people_aliases.json` fixes **pages only** — 266 Nate mentions still carry the wrong string in `thoughts.people`, so every people-based query misses them. Needs data-layer canonicalization + capture-time prevention, plus a call on whether the owner should have a person page at all
+- **Wiki compile cost** (roadmap #7, `plans/in_progress/wiki_compile_cost_control.md`) — `person-nate-b-jones` (905 thoughts) is **52% of compile input volume** and would cost ~$1.40/week forever once the cron runs. Measured answer to "is that page worth it": **~96% duplication** — 874 of his 906 thoughts already reach a compiled topic page, and he feeds 300 of 366 topic pages, so deleting it orphans **32 thoughts, not 905**. Residual value is his cross-topic framework through-line, which topic pages structurally can't express — but that's also the slowest-changing content, so **quarterly cadence beats both weekly recompiles and deletion**. Decide before the cron goes live
 
 ### Needs more design before implementing
 - **`ai_token_tracker.md`** (new stub, 2026-07-20) — zero cost/token visibility exists across the 6 LLM/embedding call sites today; needs a planning session (table vs. log file, shared TS/Python logging path, pricing table maintenance)
@@ -42,6 +54,7 @@ _Also this session:_ closed the thinking A/B as keep-disabled + removed the `--t
 ## Recently Shipped
 | Date | Item | What |
 |---|---|---|
+| 2026-07-26 | Workspace-only project scoping | Grilled then shipped same session (`plans/done/project_page_implementation.md`). **A project IS a `workspace`** — anchor-topic grouping retired; projects auto-discovered from distinct `workspace` values ≥2, so "project exists but has no page" is structurally impossible. Rejected the 2026-07-24 "hybrid union" proposal on measurement: topic-match and workspace select nearly *disjoint* sets (Second Brain 34 vs 34, only 5 overlap), so a union staples two answers together and keeps a heuristic load-bearing forever. Page identity now derives from the **workspace slug, not the display title** (a title edit could otherwise fork a page silently under an unattended cron); `project_definitions.json` demoted to an optional title-override map with `string \| object` normalization; explicit `matches_workspace_strict` / `matches_workspace_global` helpers so project *categorization* can't inherit migration 007's NULL-is-global *retrieval* semantic (which would have put ~1900 unscoped thoughts on every page). One-time 29-row backfill (`010`, guarded + idempotent; 4 `is_external` thoughts correctly excluded). **8 project pages (4 new); 44 recompiled, 0 errors, ~$3**; orphan `project-board-game-inventory` removed by hand (no delete path exists — known gap). Also fixed a live bug: `compiled_wiki` is a nested git repo, so captures there resolved to `workspace=compiled_wiki` and fragmented off the Second Brain page — `.workspace` files now pin the slugs. |
 | 2026-07-24 | `find_by_url` MCP tool + `/pan` dedup rewire | Grilled then built (`mcp_improvements.md` §4, commits `b4ac6fc` design + `d0d77b3` impl). Migration 009 RPC: server-side literal substring match (`strpos` over `unnest(urls)`, not `ILIKE` — avoids `_`/`%` wildcard pitfalls), deterministic order, seq scan accepted. `server.ts` `find_by_url` tool (→1.6.0): canonicalizes in TS (YouTube→11-char video ID unifying youtu.be/watch?v=/?si=/shorts/embed; other hosts→host+path, query stripped), accepts URLs/bare IDs/bare domains, <4-char guard, internal paginate-to-exhaustion, output grouped by source with an active-`insight` "already panned" signal, `status=all` default. `/pan` Step 0b now uses it as the authoritative check (retired the companion-URL hop, kept topical fallback), judging "panned" by the insight cluster not a reminder. Ground-truth verified: `iUSdS-6uwr4`→39, `jwtpMSRAPAQ`→35/34/1, substack path→26, bare domain→532, canonicalizer unifies all URL forms. Closes the last proven bug in `mcp_improvements.md`. |
 | 2026-07-24 | Full wiki recompile (pagination correction) | One-time `compile_wiki.py --all` against corrected counts: **418 pages, 202m, 0 errors, $19.32**. Wiki grew 154→418 (the pagination fix tripled qualifying pages — 264 net-new previously undercounted below threshold). Verified 418/0-stale in Supabase, 418-file local mirror, exact ground-truth spot-checks; completion Discord DM delivered (live-confirmed the UA-header 403 fix). Mirror pushed (`compiled_wiki` `6990c46`). Cron Step 5 (Pi deploy) is the only piece left of roadmap #1. |
 | 2026-07-24 | Wiki thinking A/B — closed as keep-disabled | Tested Sonnet 5 adaptive thinking on "AI agents" (330 thoughts) via a temporary `--thinking` flag: adaptive exhausts `max_tokens: 8192` and returns zero text (crashed); one failed call cost $0.81 vs $0.52 for 3 disabled smoke pages. Kept thinking disabled everywhere and **removed the flag** so it can't be enabled by accident. `plans/done/wiki_thinking_ab_test.md` |
@@ -78,8 +91,13 @@ _Also this session:_ closed the thinking A/B as keep-disabled + removed the `--t
 - Pan skill plan (done): `plans/done/pan_skill_improvements.md`
 - Recap skill plan (done): `plans/done/recap_skill_improvements.md` · follow-up stub: `plans/in_progress/recall_before_work_skill.md`
 - Workspace field plan (done): `plans/done/project_scoping_field.md`
+- Project pages plan (done): `plans/done/project_page_implementation.md`
+- Digest chunking fix: `plans/in_progress/digest_chunking_fix.md`
+- Workspace correction + diagnostic: `plans/in_progress/workspace_correction_and_diagnostic.md`
+- Person identity resolution: `plans/in_progress/person_identity_dedup.md`
+- Wiki compile cost control: `plans/in_progress/wiki_compile_cost_control.md`
 - `get_pans` skill plan (done): `plans/done/get_pans_skill.md`
 - Digest backlog filter: `plans/in_progress/digest_backlog_filter.md`
 - OB1 comparison / backlog stubs: `plans/in_progress/open_brain_improvements.md`
 - Pan queue tracker: `open_pans.md`
-- Project page grouping: `scripts/project_definitions.json`
+- Project display-name overrides: `scripts/project_definitions.json` (no longer anchor topics — a project is a `workspace`)

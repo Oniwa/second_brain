@@ -36,6 +36,13 @@ DEFAULT_PERSON_THRESHOLD = 2
 DEFAULT_PROJECT_THRESHOLD = 2
 OUTPUT_DIR = Path(__file__).parent.parent / "compiled_wiki"
 
+# Mirrors EXTERNAL_SOURCE_PATTERN in mcp/src/server.ts — external content is deliberately
+# never stamped with a workspace (a /pan run must not inherit whatever repo it ran from),
+# so it must not be reported as a missing-workspace mistake. Keep the two lists in sync.
+EXTERNAL_SOURCE_RE = re.compile(
+    r"^(youtube|substack|article|github|synthesis|danshapiro|simonwillison):", re.IGNORECASE
+)
+
 # PostgREST caps any single response at max_rows (supabase/config.toml). supabase_get()
 # pages past this transparently — see its docstring.
 POSTGREST_PAGE_SIZE = 1000
@@ -236,7 +243,51 @@ def load_aliases() -> tuple[dict, dict, dict]:
     people = json.loads((scripts_dir / "people_aliases.json").read_text("utf-8")) if (scripts_dir / "people_aliases.json").exists() else {}
     topics = json.loads((scripts_dir / "topic_aliases.json").read_text("utf-8")) if (scripts_dir / "topic_aliases.json").exists() else {}
     projects = json.loads((scripts_dir / "project_definitions.json").read_text("utf-8")) if (scripts_dir / "project_definitions.json").exists() else {}
-    return people, topics, projects
+    return people, topics, normalize_project_overrides(projects)
+
+
+def normalize_project_overrides(raw: dict) -> dict:
+    """Normalize the project display-name override map to one shape: {workspace: {"title": str}}.
+
+    Accepts `"workspace": "Title"` (shorthand) or `"workspace": {"title": ...}` (room to
+    grow — per-project threshold/exclude/description can be added later without rewriting
+    the file or touching consumers). The file is entirely optional: projects are discovered
+    from the `workspace` column, and an absent override just means a titlecased slug.
+    """
+    out: dict = {}
+    for workspace, value in (raw or {}).items():
+        out[workspace] = {"title": value} if isinstance(value, str) else dict(value)
+    return out
+
+
+# `workspace` carries two different meanings in this system and they must never be confused:
+#   - retrieval (semantic_search, migration 007): NULL means "global, always eligible", so a
+#     workspace-scoped search still surfaces unscoped notes.
+#   - categorization (project pages, here): a page is a claim about what belongs to a project.
+#     Inheriting the NULL-is-global rule would put all ~1900 unscoped thoughts on every page.
+# Hence two explicitly named helpers rather than an inline comparison at each call site.
+
+def matches_workspace_strict(thought: dict, workspace: str) -> bool:
+    """Categorization: exact membership only. NULL is NOT a match."""
+    return thought.get("workspace") == workspace
+
+
+def matches_workspace_global(thought: dict, workspace: str) -> bool:
+    """Retrieval: the migration-007 semantic — the workspace plus unscoped/global thoughts."""
+    ws = thought.get("workspace")
+    return ws == workspace or ws is None
+
+
+def project_slug(workspace: str) -> str:
+    """Page identity derives from the workspace slug, never the display title — a title is
+    cosmetic, and deriving identity from it means editing an override silently forks the page
+    and orphans the old one (invisible under an unattended cron)."""
+    return f"project-{workspace.replace('_', '-')}"
+
+
+def project_title(workspace: str, project_defs: dict) -> str:
+    override = (project_defs.get(workspace) or {}).get("title")
+    return override or workspace.replace("_", " ").title()
 
 
 def build_reverse_map(aliases: dict) -> dict:
@@ -476,15 +527,16 @@ def fetch_thoughts_for_person(supabase_url: str, key: str, person: str) -> list:
     })
 
 
-def fetch_thoughts_for_project(supabase_url: str, key: str, anchor_topics: list) -> list:
-    thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
+def fetch_thoughts_for_project(supabase_url: str, key: str, workspace: str) -> list:
+    """A project IS a workspace — membership is strict equality on the workspace column.
+    Anchor-topic matching was retired 2026-07-26 (see project_page_implementation.md)."""
+    return supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
+        "workspace": f"eq.{workspace}",
+        "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,workspace,created_at,raw_text",
         "order": "created_at.desc,id.asc",
         "limit": "1000",
     })
-    anchor_set = {t.lower() for t in anchor_topics}
-    return [t for t in thoughts if anchor_set & {tag.lower() for tag in (t.get("topics") or [])}]
 
 
 def fetch_all_for_entity(fetch_fn, supabase_url: str, key: str, variants: list) -> list:
@@ -570,33 +622,53 @@ def get_distinct_people(supabase_url: str, key: str, people_aliases: dict) -> di
 
 
 def get_qualifying_projects(supabase_url: str, key: str, project_defs: dict, threshold: int) -> dict:
-    """Returns {project_name: thought_count} for projects meeting threshold."""
+    """Returns {workspace_slug: thought_count} for workspaces meeting threshold.
+
+    Projects are auto-discovered from the distinct `workspace` values present in the data —
+    being captured in a repo is sufficient to get a page. This is the fix for the original
+    defect, where a project silently had no page purely because nobody had added it to a
+    hand-maintained config file. `project_defs` supplies display names only, and never gates
+    which projects exist.
+    """
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "id,topics",
+        "workspace": "not.is.null",
+        "select": "id,workspace",
         "order": "id.asc",
         "limit": "1000",
     })
-    result = {}
-    for project_name, anchor_topics in project_defs.items():
-        anchor_set = {t.lower() for t in anchor_topics}
-        count = sum(1 for t in thoughts if anchor_set & {tag.lower() for tag in (t.get("topics") or [])})
-        if count >= threshold:
-            result[project_name] = count
-    return result
+    counts: dict = {}
+    for t in thoughts:
+        ws = t.get("workspace")
+        if ws:
+            counts[ws] = counts.get(ws, 0) + 1
+    excluded = {ws for ws, cfg in project_defs.items() if cfg.get("exclude")}
+    return {ws: n for ws, n in counts.items() if n >= threshold and ws not in excluded}
 
 
 def get_unmatched_project_thoughts(supabase_url: str, key: str, project_defs: dict) -> list:
-    """Returns project-category thoughts not covered by any project definition."""
+    """Project-category thoughts that carry no workspace, so they reach no project page.
+
+    Under workspace-only scoping this is the new silent-failure mode: a thought captured
+    outside its repo (Discord, a /pan run, a sibling repo) lands with workspace=NULL and
+    quietly misses its project. External content is excluded — deriveCaptureWorkspace
+    (mcp/src/server.ts) keeps it global by design, so it is not a scoping mistake.
+
+    NOTE: only surfaced in --dry-run today. Wiring it into the cron's Discord notification,
+    plus workspace editing via update_thought, is tracked in
+    plans/in_progress/workspace_correction_and_diagnostic.md (roadmap #3).
+    """
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
         "category": "eq.project",
-        "select": "id,title,topics",
+        "workspace": "is.null",
+        "select": "id,title,topics,is_external,source",
         "order": "id.asc",
         "limit": "1000",
     })
-    all_anchors = {t.lower() for anchors in project_defs.values() for t in anchors}
-    return [t for t in thoughts if not (all_anchors & {tag.lower() for tag in (t.get("topics") or [])})]
+    return [t for t in thoughts
+            if not t.get("is_external")
+            and not EXTERNAL_SOURCE_RE.match(t.get("source") or "")]
 
 
 def get_existing_pages(supabase_url: str, key: str) -> dict:
@@ -677,25 +749,25 @@ def compile_single_person(env: dict, canonical: str, variants: list, dry_run: bo
     print("done")
 
 
-def compile_single_project(env: dict, project_name: str, anchor_topics: list, dry_run: bool) -> None:
-    slug = slugify(project_name, "project")
-    thoughts = fetch_thoughts_for_project(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], anchor_topics)
+def compile_single_project(env: dict, workspace: str, title: str, dry_run: bool) -> None:
+    slug = project_slug(workspace)
+    thoughts = fetch_thoughts_for_project(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], workspace)
     n = len(thoughts)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if dry_run:
-        print(f"[dry-run] project: {project_name} -- {n} thoughts -> {slug}.md")
+        print(f"[dry-run] project: {title} ({workspace}) -- {n} thoughts -> {slug}.md")
         return
 
-    print(f"Compiling project: {project_name} ({n} thoughts)...", end=" ", flush=True)
+    print(f"Compiling project: {title} ({n} thoughts)...", end=" ", flush=True)
     fenced = fence_thoughts(thoughts)
     user_content = (
-        f"Compile a project page for: {project_name}\n"
+        f"Compile a project page for: {title}\n"
         f"Thought count: {n}\nDate: {today}\n\n"
         f"<thoughts>\n{fenced}\n</thoughts>"
     )
     content = call_sonnet(env["ANTHROPIC_API_KEY"], PROJECT_SYSTEM_PROMPT, user_content)
-    write_page(env, slug, "project", project_name, content, n)
+    write_page(env, slug, "project", title, content, n)
     print("done")
 
 
@@ -749,7 +821,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             if count >= min_person:
                 people_above[person] = count
 
-    if not args.skip_projects and project_defs:
+    if not args.skip_projects:
         projects_above = get_qualifying_projects(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs, min_project)
 
     def stale_marker(slug: str, count: int) -> str:
@@ -766,24 +838,25 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         for person, count in sorted(people_above.items(), key=lambda x: -x[1]):
             slug = slugify(person, "person")
             print(f"  {person:<48} {count:>3} thoughts{stale_marker(slug, count)}")
-        for project, count in sorted(projects_above.items(), key=lambda x: -x[1]):
-            slug = slugify(project, "project")
-            print(f"  {project:<48} {count:>3} thoughts{stale_marker(slug, count)}")
+        for workspace, count in sorted(projects_above.items(), key=lambda x: -x[1]):
+            slug = project_slug(workspace)
+            label = f"{project_title(workspace, project_defs)} ({workspace})"
+            print(f"  {label:<48} {count:>3} thoughts{stale_marker(slug, count)}")
 
         if topics_below:
             print(f"\nSKIPPED — below threshold of {min_topic} ({len(topics_below)} topics):\n")
             for topic, count in sorted(topics_below.items(), key=lambda x: -x[1]):
                 print(f'  {topic:<48} {count:>3} thoughts  -> --topic "{topic}" --min-thoughts {count}')
 
-        if not args.skip_projects and project_defs:
+        if not args.skip_projects:
             unmatched = get_unmatched_project_thoughts(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs)
             if unmatched:
-                print(f"\nUNMATCHED PROJECT THOUGHTS (not covered by any definition):\n")
+                print(f"\nPROJECT THOUGHTS WITH NO WORKSPACE ({len(unmatched)} — these reach no project page):\n")
                 for t in unmatched:
                     topics_str = ", ".join(t.get("topics") or [])
                     title = (t.get("title") or "")[:50]
-                    print(f'  "{title}"  [{topics_str}]')
-                print("  -> Add these to project_definitions.json to include them on a project page")
+                    print(f'  {t["id"][:8]}  "{title}"  [{topics_str}]')
+                print("  -> Captured outside a project repo. Set the workspace to attach them to a project.")
 
         print(f"\nTotal: {len(topics_above) + len(people_above) + len(projects_above)} pages would compile, {len(topics_below)} topics skipped")
         return
@@ -857,8 +930,8 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
 
-    for project, count in sorted(projects_above.items(), key=lambda x: -x[1]):
-        slug = slugify(project, "project")
+    for workspace, count in sorted(projects_above.items(), key=lambda x: -x[1]):
+        slug = project_slug(workspace)
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
@@ -866,8 +939,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             skipped_unchanged += 1
             continue
         try:
-            anchor_topics = project_defs[project]
-            compile_single_project(env, project, anchor_topics, dry_run=False)
+            compile_single_project(env, workspace, project_title(workspace, project_defs), dry_run=False)
             compiled += 1
         except SystemicAPIError as e:
             print(f"\n  ABORT (systemic): {e}", file=sys.stderr)
@@ -875,13 +947,13 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             notify_and_exit(aborted=True, abort_reason=str(e), exit_code=1)
         except Exception as e:
             errors += 1
-            detail = f"• project:{project}: {e}"
+            detail = f"• project:{workspace}: {e}"
             error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
 
     n_topics = sum(1 for t in topics_above if not (args.skip_existing and slugify(t, "topic") in existing))
     n_people = sum(1 for p in people_above if not (args.skip_existing and slugify(p, "person") in existing))
-    n_projects = sum(1 for p in projects_above if not (args.skip_existing and slugify(p, "project") in existing))
+    n_projects = sum(1 for p in projects_above if not (args.skip_existing and project_slug(p) in existing))
     print(f"\nCompiled: {compiled} page(s) ({n_topics} topics, {n_people} people, {n_projects} projects)")
     if skipped_existing:
         print(f"Skipped:  {skipped_existing} already-compiled page(s) (--skip-existing)")
@@ -972,20 +1044,21 @@ def main() -> None:
             print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
     elif args.project:
-        if args.project not in project_defs:
-            print(f"Project '{args.project}' not found in project_definitions.json", file=sys.stderr)
-            print(f"Known projects: {', '.join(project_defs.keys())}", file=sys.stderr)
+        # --project takes a workspace slug (identity), not a display title.
+        known = get_qualifying_projects(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs, 1)
+        if args.project not in known:
+            print(f"No active thoughts with workspace '{args.project}'", file=sys.stderr)
+            print(f"Known workspaces: {', '.join(sorted(known))}", file=sys.stderr)
             sys.exit(1)
-        anchor_topics = project_defs[args.project]
         if args.skip_existing:
             existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
-            slug = slugify(args.project, "project")
+            slug = project_slug(args.project)
             if slug in existing:
                 print(f"Skipping {args.project} — already compiled (--skip-existing)")
                 return
         if not args.dry_run:
             print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        compile_single_project(env, args.project, anchor_topics, dry_run=args.dry_run)
+        compile_single_project(env, args.project, project_title(args.project, project_defs), dry_run=args.dry_run)
         if not args.dry_run:
             print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
