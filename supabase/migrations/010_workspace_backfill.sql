@@ -1,3 +1,11 @@
+-- ⚠️ DO NOT RUN `supabase db push` WITHOUT RECONCILING MIGRATION HISTORY FIRST.
+-- This migration's effect is ALREADY APPLIED in production (2026-07-26, 29 rows,
+-- via PostgREST). It was not applied by the CLI because the migration history is
+-- desynced: 007-009 are live in production but recorded remotely under timestamped
+-- names, so `db push` would try to re-apply 007, 008, 009 AND 010 together.
+-- The statements below are idempotent (`workspace is null` guard), so a re-run of
+-- THIS file is harmless — the risk is 007-009 replaying alongside it.
+--
 -- Backfill `workspace` for pre-workspace thoughts, so project pages can move to
 -- workspace-only scoping (see plans/in_progress/project_page_implementation.md,
 -- "RESOLVED 2026-07-26"). Follows the same pattern as migration 007.

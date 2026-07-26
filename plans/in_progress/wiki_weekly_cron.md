@@ -91,6 +91,8 @@ wiki = f"{project_path}/scripts/compile_wiki.py"
 ```
 
 ### Step 5 — Deploy to the Pi
+
+> ⛔ **GATE — decide roadmap #7 (`wiki_compile_cost_control.md`) before running this.** Activating the cron starts a recurring charge, and one page dominates it: `person-nate-b-jones` is 905 thoughts, **52% of a run's entire input volume**, and its count changes almost weekly — so `--skip-unchanged` (which triggers on *any* delta) will recompile all 905 thoughts every week, **~$1.40/week in perpetuity**, more than the other 55 person pages combined. Measurement says that page is also **~96% duplication** of topic pages. Cheapest fix is a recompile-cadence or change-threshold decision, which is easier to make *before* the cron is live than after.
 Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) to pick up the new job.
 
 **Prerequisite for Step 6 — confirm the wiki repo exists on the Pi (added 2026-07-24).** The compiled markdown lives in a **separate git repo** at `compiled_wiki/` (remote `https://github.com/Oniwa/compiled_wiki.git`, its own `.git`, gitignored by the parent — *not* a submodule, so a `second_brain` clone does **not** bring it along). Before the git-publish step can work on the Pi, verify:
