@@ -14,6 +14,7 @@ Usage:
   python scripts/compile_wiki.py --skip-existing
   python scripts/compile_wiki.py --skip-unchanged
   python scripts/compile_wiki.py --skip-unchanged --cadence-days 90
+  python scripts/compile_wiki.py --all --skip-unchanged --git-publish
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
   python scripts/compile_wiki.py --skip-projects
@@ -23,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 import urllib.error
@@ -510,7 +512,7 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
 
 def _build_dm(compiled: int, errors: int, error_details: list[str],
               elapsed_s: int, run_ts: str, aborted: bool = False,
-              abort_reason: str = "") -> str:
+              abort_reason: str = "", publish_note: str = "") -> str:
     if aborted:
         lines = [
             f"🧠 Wiki compile ABORTED — {run_ts}",
@@ -530,7 +532,41 @@ def _build_dm(compiled: int, errors: int, error_details: list[str],
             f"✅ Compiled: {compiled} page(s)",
             f"⏱ {fmt_elapsed(elapsed_s)}",
         ]
+    if publish_note:
+        lines.append(publish_note)
     return "\n".join(lines)
+
+
+def git_publish_wiki(compiled_count: int) -> str:
+    """Commit + push compiled_wiki/ if --git-publish was set and something changed.
+    Returns a status line for the completion DM, or "" if there was nothing to publish.
+    Never raises — a broken publish setup must surface in the DM, not crash an
+    otherwise-successful compile run (the DB, not the mirror, is the source of truth)."""
+    repo_dir = OUTPUT_DIR
+    if not (repo_dir / ".git").exists():
+        return f"⚠️ --git-publish requested but {repo_dir} is not a git repo — nothing pushed"
+
+    status = subprocess.run(["git", "-C", str(repo_dir), "status", "--porcelain"],
+                             capture_output=True, text=True)
+    if status.returncode != 0:
+        return f"⚠️ git-publish: status check failed: {status.stderr.strip()[:200]}"
+    if not status.stdout.strip():
+        return ""
+
+    commit_msg = f"Weekly wiki recompile {datetime.now(timezone.utc).strftime('%Y-%m-%d')} — {compiled_count} page(s) updated"
+    for cmd in (
+        ["git", "-C", str(repo_dir), "add", "-A"],
+        ["git", "-C", str(repo_dir), "commit", "-m", commit_msg],
+    ):
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            return f"⚠️ git-publish failed ({cmd[3]}): {r.stderr.strip()[:200]}"
+
+    push = subprocess.run(["git", "-C", str(repo_dir), "push"], capture_output=True, text=True)
+    if push.returncode != 0:
+        return f"⚠️ git-publish: push failed: {push.stderr.strip()[:200]}"
+
+    return f"📤 Published to compiled_wiki: {commit_msg}"
 
 
 # ── Thought fetching ──────────────────────────────────────────────────────────
@@ -950,9 +986,14 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         elapsed_s = elapsed_now()
         finish_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         print(f"Finished: {finish_ts} ({fmt_elapsed(elapsed_s)})")
+        publish_note = ""
+        if not aborted and args.git_publish:
+            publish_note = git_publish_wiki(compiled)
+            if publish_note:
+                print(publish_note)
         if discord_token and discord_user:
             dm = _build_dm(compiled, errors, error_details, elapsed_s, run_ts,
-                           aborted=aborted, abort_reason=abort_reason)
+                           aborted=aborted, abort_reason=abort_reason, publish_note=publish_note)
             send_discord_dm(discord_token, discord_user, dm)
         sys.exit(exit_code)
 
@@ -1073,6 +1114,8 @@ def main() -> None:
     parser.add_argument("--cadence-days", type=float, default=None,
                         help=f"Days between recompiles for content-creator person pages under "
                              f"--skip-unchanged, even when thought_count changed (default: {CONTENT_CREATOR_CADENCE_DAYS})")
+    parser.add_argument("--git-publish", action="store_true",
+                        help="Commit+push compiled_wiki/ after a completed --all run, if anything changed (for cron)")
 
     args = parser.parse_args()
 

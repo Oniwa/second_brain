@@ -147,7 +147,7 @@ def setup_cron() -> None:
         ("Nudge check — 6pm (silent if captured recently)", f"0 18 * * *  {actual_user} {python} {nudge} >> {log_dir}/nudge.log 2>&1"),
         ("Weekly digest — Sunday 8am", f"0 8 * * 0   {actual_user} {python} {digest} --weekly >> {log_dir}/digest-weekly.log 2>&1"),
         ("Weekly review — Sunday 9am", f"0 9 * * 0   {actual_user} {python} {digest} --review >> {log_dir}/digest-review.log 2>&1"),
-        ("Weekly wiki recompile — Sunday 3am", f"0 3 * * 0   {actual_user} {python} {wiki} --all --skip-unchanged >> {log_dir}/wiki-compile.log 2>&1"),
+        ("Weekly wiki recompile — Sunday 3am", f"0 3 * * 0   {actual_user} {python} {wiki} --all --skip-unchanged --git-publish >> {log_dir}/wiki-compile.log 2>&1"),
     ]
 
     if CRON_FILE.exists():

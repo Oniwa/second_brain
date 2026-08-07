@@ -1,6 +1,6 @@
 # Wire Up Weekly Wiki Compile Cron
 
-> ⚠️ **GRILL BEFORE IMPLEMENTING — WHOLE PLAN.** Nothing further in this plan gets built until it has been through a `/grill-me` pass. This gate covers the entire plan (remaining Steps 5 + 6 and any assumptions in the shipped steps worth re-examining), not just Step 6's git-publish. The shapes described below are proposed starting points for that grill, not approved specs.
+> ✅ **Grilled 2026-08-06.** Steps 1–4's decisions (schedule, command, location) were re-confirmed as-is, not re-litigated. Step 6 design resolved — see Resolution below. Code for Step 6 ships this session; **Step 5's Pi-side execution (cloning `compiled_wiki`, verifying push auth, re-running `setup_rpi.py`) is a runbook for the user to execute separately** — this session did not touch the Pi.
 
 **Status:** Step 1 shipped (UA fix), Step 4 shipped (cron job added to `setup_rpi.py`). The manual full correction (originally Step 2, renumbered to Step 3) attempted 2026-07-22 and failed — see Update below. A new Step 2 (smoke test) was added as a result, to run before retrying the full correction. Step 5 (Pi deploy) not started. **Step 6 (git-publish the compiled mirror) added 2026-07-24 — not started, and must be grilled before implementing (see the ⚠️ note on Step 6). Without it the cron regenerates pages only on the Pi's local disk and the `Oniwa/compiled_wiki` GitHub mirror silently goes stale.**
 
@@ -102,29 +102,27 @@ Re-run `setup_rpi.py` on the Pi (or manually patch `/etc/cron.d/second-brain`) t
 
 ### Step 6 — Commit & push the compiled_wiki mirror (git-publish)
 
-> ⚠️ Covered by the whole-plan grill gate at the top. Key open sub-decisions for this step: (a) where the git logic lives (`--git-publish` flag vs. cron shell chain vs. wrapper) and (b) the non-interactive push-auth mechanism (PAT vs. SSH deploy key).
+**Resolution — grilled 2026-08-06.** `--git-publish` flag on `compile_wiki.py`, **`--all`-only** (single-page `--topic`/`--person`/`--project` runs ignore it — those are manual/debugging runs, not the weekly cycle). After a successful `--all` run, when `--git-publish` is set:
+1. If `compiled_wiki/.git` doesn't exist, **fail loudly**: report clearly in the completion Discord DM (e.g. "⚠️ --git-publish requested but compiled_wiki/ is not a git repo") and log to stderr. The compile itself still succeeded (DB is source of truth) — **exit code stays 0** — but a broken publish setup must not go unnoticed for weeks.
+2. **Only if something changed** — guard on `git -C compiled_wiki status --porcelain`; if empty, skip (no empty commits on weeks where `--skip-unchanged` touched nothing).
+3. `git -C compiled_wiki add -A`
+4. `git -C compiled_wiki commit -m "Weekly wiki recompile {DATE} — {N} page(s) updated"` (mirrors the Discord DM's counts; no page-level detail in the body).
+5. `git -C compiled_wiki push`
+6. **Report push success/failure in the completion Discord DM** (extend `_build_dm`). A push failure (auth/network) is reported but **does not crash the run or flip the exit code** — the DB is already updated; the mirror just lags a week.
+7. `--dry-run` + `--git-publish` together is a no-op (dry-run never writes files, so there's nothing to commit) — no warning needed, just skipped silently.
 
-The cron regenerates markdown into `compiled_wiki/` but nothing publishes it — `compile_wiki.py` has zero git logic today. Add a publish step so the weekly run's output reaches GitHub.
+The Sunday cron command (Step 4) becomes `... --all --skip-unchanged --git-publish >> …` — update `setup_rpi.py`'s `setup_cron()` entry accordingly.
 
-**Where the logic lives (leaning, confirm in a short grill):** a `--git-publish` flag on `compile_wiki.py` rather than chaining shell in the cron line — the script already knows the compiled/skipped counts and exit status, so it can build a meaningful commit message and only publish on a clean (exit-0) run. After a successful `--all`, when `--git-publish` is set:
-1. **Only if something changed** — guard on `git -C compiled_wiki status --porcelain`; if empty, skip (no empty commits on weeks where `--skip-unchanged` touched nothing).
-2. `git -C compiled_wiki add -A`
-3. `git -C compiled_wiki commit -m "Weekly wiki recompile {DATE} — {N} page(s) updated"` (mirror the Discord DM's counts).
-4. `git -C compiled_wiki push`
-5. **Report push success/failure in the completion Discord DM** (extend `_build_dm`), so an auth/network failure surfaces instead of dying silently in the log. A push failure should not crash the run — the DB is already updated; the mirror just lags a week.
+**Non-interactive push auth — user-verified, not this session's concern.** The user believes the Pi's git config already has working GitHub credentials. **Flagged risk, not yet confirmed:** cron runs with no TTY and doesn't inherit an interactive session's SSH agent or credential-manager state, so "push works when I do it manually" doesn't guarantee it works from cron. Before relying on this, the user should check on the Pi:
+- `git -C ~/second_brain/compiled_wiki remote -v` — if SSH (`git@github.com:...`), confirm the key has **no passphrase**, or a persistent agent (systemd unit, `keychain`) is running independent of any login shell.
+- If HTTPS (`https://github.com/...`), confirm `git config --global credential.helper` is set to something persistent (`store`, a credential manager) — not unset, which would prompt on first push and hang under cron.
 
-The Sunday cron command (Step 4) then becomes `... --all --skip-unchanged --git-publish >> …`.
-
-**Open sub-decision — non-interactive auth (the real blocker):** cron has no TTY, so `git push` must authenticate without prompting. Two options, decide before deploy:
-- **HTTPS + stored PAT** — a fine-scoped (`repo` on `compiled_wiki` only) personal access token in the Pi's git credential store (`git config credential.helper store`), or a `.netrc`. Simple; token needs periodic rotation.
-- **SSH deploy key** — a per-Pi deploy key with write access added to the `compiled_wiki` repo, remote switched to `git@github.com:...`. No expiry, revocable per-device; slightly more setup.
-
-Lean SSH deploy key (no rotation, device-scoped), but this is a genuine choice — grill briefly. Whichever is chosen, it's a one-time Pi setup folded into Step 5.
+This check, plus cloning `compiled_wiki/` as a sibling of `scripts/` if it isn't already, plus re-running `setup_rpi.py`, is the Step 5 runbook — Pi-side, done by the user separately from this session.
 
 ## Files touched
 
-- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1); fix `OUTPUT_DIR`, disable thinking, robust text-block parsing (found during the failed Step 3 attempt, before this plan had a Step 2 smoke test); **add `--git-publish` (commit+push `compiled_wiki`, only-if-changed, report in DM) — Step 6**
-- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 4); **cron command gains `--git-publish`; Pi setup must ensure `compiled_wiki` is cloned + push auth configured — Steps 5/6**
+- `scripts/compile_wiki.py` — add `User-Agent` header to `send_discord_dm` (Step 1); fix `OUTPUT_DIR`, disable thinking, robust text-block parsing (found during the failed Step 3 attempt, before this plan had a Step 2 smoke test); **`--git-publish` shipped 2026-08-06** (`git_publish_wiki()`, `--all`-only, only-if-changed, fails loudly but exits 0 on a missing repo, reports push success/failure in the completion DM)
+- `scripts/setup_rpi.py` — add job to `setup_cron()` (Step 4); **cron command's `setup_cron()` entry updated 2026-08-06 to include `--git-publish`; Pi-side rollout (clone `compiled_wiki`, verify push auth, re-run `setup_rpi.py`) is a runbook, not yet executed — Step 5**
 - `supabase/functions/process-thought/index.ts`, `supabase/functions/generate-digest/index.ts` — same thinking/parsing fix (found same day, same root cause)
 
 ## Verify
