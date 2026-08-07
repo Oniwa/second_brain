@@ -180,8 +180,8 @@ def print_next_steps() -> None:
     python3 scripts/remind.py --test
     python3 scripts/nudge.py --test
 
-  After any code update on dev machine:
-    git pull origin develop
+  After any code update (merged to main):
+    git pull origin main
     sudo systemctl restart {SERVICE_NAME}
 {'=' * 55}
 """)
