@@ -25,14 +25,36 @@ If the transcript fetch fails (video unavailable, transcripts disabled, IP block
 
 Before Phase 1, check whether this source has already been panned:
 
-**If a URL was provided:** Call `semantic_search` with the URL string (e.g. `https://www.youtube.com/watch?v=0TpON5T-Sw4`). If both a YouTube URL and a Substack URL are provided, run `semantic_search` against BOTH URLs separately. If any results reference either URL, warn the user:
+**If a URL was provided:** You must be able to find prior pans from *whatever* URL the user gives you. Run this lookup for **every** URL provided:
+
+1. **Authoritative URL lookup** — Call `find_by_url` with the URL (it defaults to status `all`). This is deterministic and URL-form-agnostic: YouTube links resolve to their video ID so `youtu.be`, `watch?v=`, `?si=` tracking, `shorts`, and `embed` forms all unify; other URLs match on host+path. It returns hits **grouped by source label with counts**, flagging any source that holds active `insight` captures (the "likely already panned" signal). This replaces the old fuzzy `semantic_search`-on-the-URL-string dance — you no longer need to hand-chase companion Substack URLs, because passing *each* URL the user gave you to `find_by_url` finds them directly.
+2. **Topical fallback** — After fetching the transcript (Step 0a), derive the video's core topic/title and run a `semantic_search` (or `get_context`) on that topic. This is the secondary net: it catches captures that reference the source *conceptually* but carry no URL in their `urls[]` field, which `find_by_url` structurally cannot find.
+
+**Reading the verdict:** the strongest evidence a source is already panned is a **cluster of active `insight` captures** referencing the URL (e.g. 39 insights = unmistakably panned) — *not* the presence of a reminder. A reminder thought ("watch/pan this video") is only the to-do; conversely, a source can be fully panned with **no** reminder at all (it may have been captured directly, or its reminder already archived). So judge by the insight cluster `find_by_url` reports, and only conclude "not yet panned" when both the `find_by_url` lookup and the topical fallback come up empty.
+
+When inspecting results, note each hit's **source label** and `is_external` status — `find_by_url` already groups by source and surfaces both.
+
+If any results reference either URL, warn the user, grouped by source label with counts:
 ```
-⚠️ This source may already be in your brain — found N thoughts from this URL:
-  - "Thought title one"
-  - "Thought title two"
-  ...
+⚠️ This source may already be in your brain — found N thoughts referencing this URL:
+
+  Source: "substack: Nate B. Jones - <label>"  (N thoughts)
+    - "Thought title one"
+    - "Thought title two"
+    ...
+
 Continue panning anyway, or stop here?
 ```
+
+**Split-source / mislabel flag:** If the target URL appears under a source label whose title clearly describes a *different* topic than the current video/article (e.g. the URL is a YouTube video about the implementation layer, but the source label names a Substack about SaaS pricing), add this note to the warning:
+```
+⚠️ Note: this URL is co-labeled under a source titled "<other label>", which looks
+like a different topic. The source may have been panned before but stamped with a
+companion URL. Treat most of this content as already captured — pan only for
+genuinely NEW insights not surfaced by the overlap checks below.
+```
+In this case, recommend the user continue but capture only net-new items (verified via Phase 2 overlap checks), rather than re-running a full pan.
+
 Stop and wait for confirmation before proceeding to Phase 1.
 
 **If raw text was provided (no URL):** Use the source label the user provides (e.g. "Q1 planning meeting", "Smith et al 2024") as the search query. If 3 or more results reference that same source label, show the same warning above.
@@ -84,14 +106,14 @@ For each extracted item:
     Recommendation: downgrade to ⚠️ — brain already has this principle; only keep if this source adds new nuance.
 ```
 
-**Soft warning (65–84%)** — possible overlap, review before capturing:
+**Soft warning (55–84%)** — possible overlap, review before capturing:
 ```
   ~ Possible overlap (74%) — "Trust requires visibility into system errors"
     Summary: Systems are abandoned not for imperfection but for loss of trust from mysterious errors.
     Recommendation: review — similar concept exists; only capture if this source adds meaningfully new framing.
 ```
 
-If no matches are at or above 65%, say nothing.
+If no matches are at or above 55%, say nothing. (Floor lowered from 65% — real near-duplicate concepts, especially within a same-author/same-topic cluster, were found consistently landing at 55–64% and slipping through silently. See `pan_skill_improvements.md` §B2.)
 
 **Step 2 — Score with reason:** Assign a score **and a one-line reason**, taking any overlap into account:
 
@@ -123,9 +145,22 @@ After scoring, show a summary: `X items to capture, Y maybes, Z skipped.`
 
 ---
 
-## Phase 2.5 — Draft (Always Runs)
+## Phase 2.5 — Merge, Draft & Trim (Always Runs)
 
-Before any captures, draft the full text for every ✅ item (and any ⚠️ items the user confirms). Show all drafts as a numbered list so the user can review wording, request trims, or cut items before anything hits the brain.
+### Step 1 — Merge check (before drafting)
+
+Before drafting, scan the scored ✅ items (and any ⚠️ items the user confirms) against each other for items that are really one concept — the inverse of the "one thought per concept" rule: split genuinely distinct ideas, but consolidate items that only look distinct. This is an in-context comparison of the extraction list, not a new `semantic_search` call.
+
+If any are found, state the merge explicitly before drafting, e.g.:
+```
+Merging items 6 and 9 into one draft — both describe the same "harness matters
+more than model" point from different angles.
+```
+Draft once for the merged concept, not once per original item — drafting first and merging after wastes a draft and a review cycle. This is a narrated decision, not a stop-and-wait gate; it rides the single confirmation point at the end of this phase, so state it clearly enough that the user can reject the merge in their one reply.
+
+### Step 2 — Draft
+
+Draft the full text for every surviving ✅ item (post-merge) and any confirmed ⚠️ items. Show all drafts as a numbered list.
 
 For each draft:
 - Write it as a complete, self-contained sentence or short paragraph — not a fragment
@@ -142,9 +177,22 @@ layer should be independently replaceable. Source: Nate B Jones - Why Agents Fai
 Draft 2: ...
 ```
 
-After showing all drafts, ask: **"Capture these now, or any changes first?"**
+### Step 3 — Recommended trims (proactive, after drafting)
 
-If `--commit` was NOT specified (the default), stop here and wait for the user to confirm or request edits before proceeding to Phase 3.
+Before asking to capture, re-read each draft for fat — restated context, editorializing, speculative asides, or filler that doesn't survive the "keep it tight" rule above — and call it out unprompted. Don't wait to be asked "any recommended trims?"; state them alongside the drafts:
+```
+Recommended trims:
+- Draft 3: cut the closing sentence — it's inference the reader can already
+  draw from the facts stated above it.
+- Draft 6: cut the speculative closing clause — forecasting, not a captured fact.
+```
+If a draft has no fat worth cutting, say nothing about it — don't manufacture a trim to seem thorough.
+
+### Confirm
+
+After showing merges, drafts, and recommended trims together, ask: **"Capture these now, or any changes first?"**
+
+If `--commit` was NOT specified (the default), stop here and wait for the user to confirm, request different trims, approve or reject a merge, or edit drafts before proceeding to Phase 3.
 
 ---
 
@@ -182,6 +230,19 @@ Panning complete.
   Captured:  N thoughts → second brain
   Skipped:   N items
 ```
+
+---
+
+## Phase 4 — Archive the "to pan" Reminder (Always Runs)
+
+A pan is not finished until its to-do is cleared. After Phase 3 — **and also whenever the duplicate pre-check reveals the source was already fully panned** (i.e. even if you capture nothing new) — locate and archive the reminder thought that asked you to pan this source, if one exists.
+
+1. From the Step 0b lookups you already ran, identify the reminder-style thought for this source — a short "watch/pan this video", "review & extract insights", "pan for gold" thought whose `URLs:` line contains the provided URL.
+2. If one exists, call `archive_thought` with its ID so it stops showing up as an open pan.
+3. Confirm to the user: `✓ Archived reminder: "<title>" (<id>)`. If no reminder thought exists, say so and move on — do not fabricate one.
+4. If the user keeps an external open-pans tracker (e.g. `open_pans.md`), check the corresponding item off there too.
+
+Only archive genuine reminder/to-do thoughts — never archive the captured insight thoughts themselves.
 
 ---
 

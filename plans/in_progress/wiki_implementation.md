@@ -52,7 +52,7 @@ This wiki is a compiled, human-readable and AI-consumable synthesis of a persona
 |---|---|---|
 | Topic | `topics @> [name]` ≥ 3 active thoughts | `topic-{kebab}` |
 | Person | `people @> [name]` ≥ 2 active thoughts | `person-{first-last}` |
-| Project | `category = 'project'` ≥ 2 thoughts with project name | `project-{name}` |
+| Project | `workspace` (distinct value) ≥ 2 active thoughts | `project-{workspace}` |
 | Autobiography | Manual `--auto [--year N]` | `auto-{year}` |
 | Debate | ≥ 3 `contradicts` edges on topic (Phase 2) | `debate-{topic}` |
 
@@ -296,10 +296,10 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 11. ⚠️ Discord DM notification on cron completion — bot returns 403 Forbidden; needs investigation
 12. ✅ Log rotation strategy — crontab redirects stdout+stderr to dated log file; `--skip-unchanged` for cron efficiency
 
-### Project Pages (partial ✅ — 0-thought issue outstanding)
-13. ✅ **Spec**: Decided on `project_definitions.json` — maps project names to anchor topic keywords; no new schema field needed
-14. ✅ **Implement**: `--project` flag + project system prompt + slug `project-{name}` in `compile_wiki.py`
-15. ⚠️ **Board Game Inventory / Meal Planner**: compiled with 0 thoughts — anchor keywords in `project_definitions.json` don't match actual `topics[]` tags; need to query those thoughts and fix anchors
+### Project Pages (complete ✅)
+13. ✅ **Spec**: ~~Decided on `project_definitions.json` — maps project names to anchor topic keywords~~ — **superseded 2026-07-26**: anchor-topic grouping is retired. A project IS a `workspace`; projects are auto-discovered from distinct `workspace` values above threshold, and `project_definitions.json` is demoted to an optional display-name override map. See `plans/done/project_page_implementation.md`.
+14. ✅ **Implement**: `--project` flag + project system prompt in `compile_wiki.py`. **Updated 2026-07-26:** `--project` now takes a *workspace slug*, not a display name, and the slug is `project-{workspace}` — page identity derives from the workspace, never the title, so editing a display-name override can't silently fork a page.
+15. ✅ **Board Game Inventory / Meal Planner**: root cause fixed 2026-07-21 — silent 1000-row PostgREST truncation in `get_qualifying_projects` and 8 other call sites (same bug class as the `get_stats` fix, `mcp_improvements.md` §6). `supabase_get()` now paginates transparently; verified via `execute_sql` ground truth (Board Game Inventory: 3 thoughts, Meal Planner: 2 thoughts, both exact). See `plans/done/compile_wiki_pagination_bug.md`
 16. ✅ **Second Brain** (20 thoughts) and **ABUCW** (4 thoughts) pages compiled correctly
 
 ### Wiki Portability (complete ✅)
@@ -314,6 +314,26 @@ compile_wiki.py  (weekly cron on Pi + on-demand CLI)
 14. `scripts/classify_edges.py` — Haiku filter → Opus classify, cost-capped
 15. Daily stale detection cron (Pi)
 16. Autobiography mode added to `compile_wiki.py`
+
+**Priority note (2026-07-01):** Bump Phase 2 (the `thought_edges` graph layer) up in priority. The link graph is the piece that most differentiates a "brain" from mere storage — it is currently the biggest gap versus a file-based/Obsidian-style system, where dense entity links are what let an agent resolve "send the invite to John." Until edges exist, cross-linking is limited to text-only "Related" sections. Source of this framing: Dan Martell - This AI System Will Make You So Smart (panned 7/1, `b4d32pBa3UY`).
+
+### Enhancements from Dan Martell "AI second brain" pan (2026-07-01)
+
+Source: youtube: Dan Martell - This AI System Will Make You So Smart It's Almost Unfair (`b4d32pBa3UY`). Panned 7/1; these are the net-new ideas from that video not already covered by the hybrid design.
+
+**1. Add `decision` and `company` as first-class entity page types.**
+Martell makes `decisions` and `companies` first-class folders in his vault; our wiki only has topic/person/project pages. Adding them would let the brain answer "what did I decide about X, how, and what were the alternatives?" and "what do I know about company Y?" directly from a compiled page instead of re-deriving from scattered captures.
+- **Decision page** — trigger: `category = 'decision'` (or a `decisions` topic tag) ≥ 2 thoughts; slug `decision-{kebab}`. Sections: Decision / Rationale (how it was decided) / Alternatives Considered / Date & Status / Related. Aligns with Martell's "what did I decide, how, and what were the alternatives."
+- **Company page** — trigger: `companies @> [name]` or `company` topic ≥ 2 thoughts; slug `company-{name}`. Sections: Overview / Research & Competitors / Interactions / Open Threads / Related.
+- Open question: do captures already carry enough `category`/`topics` signal to detect these, or is a new classifier column / people-alias-style anchor map needed? (The `project_definitions.json` anchor approach this originally pointed at is retired as of 2026-07-26 — see `plans/done/project_page_implementation.md`; if an anchor-style map is still the right shape here, model it on the alias files rather than the old project config.)
+
+**2. Visual graph view — low-priority Phase 3, scoped as a diagnostic tool (not daily-use).**
+Obsidian's graph view "feels like a brain" but its real value for a solo user is *maintenance diagnostics*, not retrieval (semantic search + compiled pages already handle retrieval). Build it only after `thought_edges` exists and scope it to surface:
+- **Orphans** — entities/thoughts with 0 edges → candidates for consolidation or deletion.
+- **Dense hubs** — topics with > N thoughts/edges → candidates to split into MOC-style sub-pages.
+- **Bridge nodes** — unexpected cross-domain connections worth a dedicated page.
+- **Cheaper 80% alternative first:** most of this diagnostic value comes from plain SQL over `thought_edges` (e.g. `entities with 0 edges`, `topics with > N thoughts`) — ship those queries before investing in a hosted D3/force-directed visualization. Treat the actual visual as optional polish.
+
 
 ### Separately — Pan Skill Improvements
 - ✓ Always dry-run first (`--commit` flag to skip; default is always preview)
@@ -330,12 +350,14 @@ Run `semantic_search` for each extracted item during Phase 2 scoring, before ass
 | Decision | Choice |
 |---|---|
 | When | Phase 2 — before scoring each item, so overlap can change ✅ → ⚠️ or ❌ |
-| Threshold | 85% similarity |
-| Results shown | Top 2 matches above threshold |
+| Threshold | Two-band, not a single cutoff: hard flag ≥85% (likely duplicate); soft warning 55–84% (review before capturing); silent <55%. Recalibrated 2026-07-12 from a 65% soft floor — real near-duplicate concepts, especially within a same-author/same-topic cluster, were found consistently landing at 55–64% and slipping through silently. See `pan_skill_improvements.md` §B2. |
+| Results shown | Top 2 matches above the soft-warning floor |
 | Display | Full match block below the item: title + summary + similarity %; include recommendation to keep or downgrade |
 | User action | Final call on score — keep ✅, downgrade to ⚠️ or ❌ |
-| No overlap | Silent — nothing shown |
+| No overlap | Silent — nothing shown below 55% |
 | Update existing | Deferred to Future Enhancements (test the workflow first) |
+
+This threshold is calibrated for pan-time dedup only (comparing a new extracted item against the settled brain). Whether the future `thought_edges` DUPLICATE/SUBSUMES classifier (see §7 below) should share this exact threshold, or use its own, is still an open design question — deferred to that work, not resolved here.
 
 ---
 
@@ -459,7 +481,7 @@ Errors:   0
 8. **Write manifest** — append phase result to `compiled-wiki/compile-manifest.json`: `{slug, entity_type, thought_count, status, compiled_at}`
 
 ### Slug normalization
-Convert entity names to URL-safe slugs:
+Convert entity names to URL-safe slugs. **Topic and person pages only as of 2026-07-26** — project slugs are derived mechanically from the workspace (`project-` + `workspace.replace("_","-")`) and never pass through this function, so a cosmetic title change cannot orphan a project page.
 - `+` → `p` (C++ → cpp, not c)
 - `#` → `sharp` (C# → csharp)
 - `.` → stripped
@@ -535,7 +557,7 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 ## Follow-Up Items (Prioritized)
 
 **Immediate (unblocked):**
-1. ⚠️ **Fix `project_definitions.json`** — Board Game Inventory and Meal Planner anchor keywords don't match actual `topics[]` tags; those project pages have 0 thoughts. Query actual tags and fix.
+1. ✅ **Fix `compile_wiki.py` pagination** — implemented and verified 2026-07-21, see `plans/done/compile_wiki_pagination_bug.md`.
 2. ⚠️ **Fix Discord DM 403** — bot returns Forbidden on completion DM; last remaining pre-cron hardening item. Investigate bot DM channel permissions.
 
 **Before scheduling cron (BLOCKER):**
@@ -574,9 +596,9 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 7. ✅ Pre-cron hardening (timestamps, exit codes, systemic error abort, 429 retry, `--skip-unchanged`; Discord DM ⚠️ returns 403)
 8. ✅ Wiki portability — private nested git repo in `compiled-wiki/`
 9. ✅ Full recompile with source labels + footnote citations + URLs (2026-05-09)
-10. ⏳ Fix project_definitions.json (0-thought projects)
+10. ✅ Fix pagination truncation (real root cause of the 0-thought projects, 2026-07-21 — `plans/done/compile_wiki_pagination_bug.md`)
 11. ⏳ Fix Discord DM 403
-12. ⏳ Decide cron location → schedule weekly recompile
+12. ⏳ Decide cron location → schedule weekly recompile (`plans/in_progress/wiki_weekly_cron.md`)
 
 ---
 
@@ -589,3 +611,14 @@ Both added to `ListToolsRequestSchema` and `CallToolRequestSchema` switch in `mc
 - `⚠️ TENSION` and `→ EVOLVED` markers appear when content diverges
 - `thought_edges` table is queryable (empty until Phase 2)
 - `stale = false` on freshly compiled pages
+
+---
+
+## Backlog Stub — Concept-Level Dedup / Merge (surfaced 2026-07-02)
+
+Archival hygiene is actually healthy (191 thoughts archived, ~10% of the brain — corrects an earlier "you never prune" critique that was based on a broken `get_stats`). But archival is mostly **reminders/admin**, not **insight dedup**. Concept-level near-duplicate *insights* still accrete unmerged — the same idea captured from multiple sources splits retrieval across near-dups instead of consolidating.
+
+This belongs to the synthesis/contradiction layer: the Phase 2 typed-edge classifier and `thought_edges` are the natural place to detect "these two thoughts are the same concept" (a `DUPLICATE`/`SUBSUMES` edge type) and offer merge, not just contradiction (`TENSION`/`EVOLVED`). The pan-time overlap threshold has since been reconciled (2026-07-12 — see the spec above, now a two-band 85%/55% scheme matching `pan_skill_improvements.md` §B2). What's still open: whether the `thought_edges` classifier should share that same threshold or use its own — decide when this stub is picked up.
+
+**Status:** stub — captured 2026-07-02, design deferred to Phase 2 edge work. Threshold half of the reconciliation is done; the shared-threshold-with-edge-classifier question remains.
+

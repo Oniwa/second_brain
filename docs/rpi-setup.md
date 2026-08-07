@@ -179,7 +179,7 @@ Post a message in `#sb-inbox` on Discord to confirm the bot is capturing.
 # SSH into Pi, pull latest, restart bot
 ssh <username>@<pi-ip>
 cd second_brain
-git pull origin develop
+git pull origin main
 sudo systemctl restart second-brain-bot
 ```
 

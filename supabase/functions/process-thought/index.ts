@@ -9,7 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CONFIDENCE_THRESHOLD = 0.7;
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
-const SONNET_MODEL = "claude-sonnet-4-6";
+const SONNET_MODEL = "claude-sonnet-5";
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
 function extractUrls(text: string): string[] {
@@ -97,6 +97,7 @@ async function classify(
     body: JSON.stringify({
       model,
       max_tokens: 512,
+      ...(model === SONNET_MODEL ? { thinking: { type: "disabled" } } : {}),
       messages: [
         {
           role: "user",
@@ -112,7 +113,11 @@ async function classify(
   }
 
   const data = await response.json();
-  const raw = data.content[0].text.trim();
+  const textBlock = data.content.find((b: { type: string }) => b.type === "text");
+  if (!textBlock) {
+    throw new Error(`No text block in response content from ${model}: ${JSON.stringify(data.content)}`);
+  }
+  const raw = textBlock.text.trim();
 
   try {
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -140,7 +145,7 @@ serve(async (req) => {
     });
   }
 
-  let body: { text: string; source?: string; id?: string; is_external?: boolean };
+  let body: { text: string; source?: string; id?: string; is_external?: boolean; workspace?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -150,7 +155,7 @@ serve(async (req) => {
     });
   }
 
-  const { text, source = "api", id, is_external = false } = body;
+  const { text, source = "api", id, is_external = false, workspace = null } = body;
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return new Response(JSON.stringify({ error: "text field is required" }), {
@@ -221,6 +226,7 @@ serve(async (req) => {
         content_hash: contentHash,
       };
       if (body.is_external !== undefined) updatePayload.is_external = is_external;
+      if (body.workspace !== undefined) updatePayload.workspace = workspace;
 
       const { data, error } = await supabase
         .from("thoughts")
@@ -298,6 +304,7 @@ serve(async (req) => {
         status,
         content_hash: contentHash,
         is_external,
+        workspace,
       })
       .select("id, title, category, confidence, status")
       .single();

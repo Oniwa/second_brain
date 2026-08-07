@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SONNET_MODEL = "claude-sonnet-4-6";
+const SONNET_MODEL = "claude-sonnet-5";
 
 const DAILY_PROMPT = `You are a personal assistant generating a brief daily digest from someone's second brain.
 
@@ -122,6 +122,7 @@ async function callClaude(prompt: string, thoughts: Thought[], archivedThoughts?
     body: JSON.stringify({
       model: SONNET_MODEL,
       max_tokens: 1024,
+      thinking: { type: "disabled" },
       messages: [{ role: "user", content }],
     }),
   });
@@ -132,7 +133,11 @@ async function callClaude(prompt: string, thoughts: Thought[], archivedThoughts?
   }
 
   const data = await response.json();
-  return data.content[0].text.trim();
+  const textBlock = data.content.find((b: { type: string }) => b.type === "text");
+  if (!textBlock) {
+    throw new Error(`No text block in response content: ${JSON.stringify(data.content)}`);
+  }
+  return textBlock.text.trim();
 }
 
 serve(async (req) => {

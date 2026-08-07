@@ -8,6 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as url from "url";
+import * as fs from "fs";
+import { execSync } from "child_process";
 
 // Load .env from project root (two levels up from mcp/src/)
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -56,12 +58,68 @@ function formatThought(t: Record<string, unknown>): string {
     t.urls && (t.urls as string[]).length
       ? `URLs: ${(t.urls as string[]).join(" ")}`
       : "",
-    `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}`,
+    `Captured: ${new Date(t.created_at as string).toLocaleDateString()} · Source: ${t.source ?? "unknown"}${t.workspace ? ` · Workspace: ${t.workspace}` : ""}`,
     t.similarity ? `Similarity: ${((t.similarity as number) * 100).toFixed(1)}%` : "",
     `ID: ${t.id}`,
   ];
   return lines.filter(Boolean).join("\n");
 }
+
+// ── Workspace scoping ───────────────────────────────────────────────────────────
+//
+// `workspace` records which project/repo a thought was captured while working in —
+// orthogonal to category='project' (which is about subject matter, not capture context).
+// See plans/done/project_scoping_field.md for the full design.
+
+const EXTERNAL_SOURCE_PATTERN = /^(youtube|substack|article|github|synthesis|danshapiro|simonwillison):/i;
+
+// Derives the current workspace from the MCP server process's cwd: a `.workspace`
+// override file at the git toplevel (for one logical project spanning multiple repos,
+// e.g. ABUCW) takes priority, then the git-toplevel directory basename, then the raw
+// cwd basename if git is unavailable. Returns null if nothing resolvable (honest —
+// callers fall back to unscoped "all" rather than silently guessing).
+function getCurrentWorkspace(): string | null {
+  try {
+    const toplevel = execSync("git rev-parse --show-toplevel", {
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+    const overridePath = path.join(toplevel, ".workspace");
+    if (fs.existsSync(overridePath)) {
+      const override = fs.readFileSync(overridePath, "utf-8").trim();
+      if (override) return override;
+    }
+    return path.basename(toplevel) || null;
+  } catch {
+    return path.basename(process.cwd()) || null;
+  }
+}
+
+// Capture-time workspace: external content (is_external, or a source that matches a
+// known external-source prefix — belt-and-suspenders since is_external is unreliable,
+// see the Known Bug note in project_scoping_field.md) always stays global (null), so a
+// /pan run never gets stamped with whatever repo it happened to run from.
+function deriveCaptureWorkspace(source: string, isExternal: boolean): string | null {
+  if (isExternal || EXTERNAL_SOURCE_PATTERN.test(source)) return null;
+  return getCurrentWorkspace();
+}
+
+// Resolves a query tool's effective scope: "all" (or an unresolvable current workspace)
+// disables filtering entirely; otherwise scope to <workspace> + global (null).
+function resolveScope(argWorkspace?: string): { scope: string; filterValue: string | null } {
+  if (argWorkspace === "all") return { scope: "all", filterValue: null };
+  const effective = argWorkspace ?? getCurrentWorkspace();
+  if (!effective) return { scope: "all", filterValue: null };
+  return { scope: effective, filterValue: effective };
+}
+
+function scopeHeader(scope: string): string {
+  return scope === "all" ? "scope: all" : `scope: ${scope} (+global)`;
+}
+
+const WORKSPACE_ARG_SCHEMA = {
+  type: "string",
+  description: "Scope to a workspace (default: current directory's workspace + global/unscoped thoughts). Pass \"all\" to search every workspace.",
+};
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
 
@@ -70,30 +128,36 @@ async function semanticSearch(args: {
   limit?: number;
   category?: string;
   status?: string;
+  workspace?: string;
 }): Promise<string> {
   const embedding = await generateEmbedding(args.query);
+  const { scope, filterValue } = resolveScope(args.workspace);
   const { data, error } = await supabase.rpc("semantic_search", {
     query_embedding: embedding,
     match_limit: args.limit ?? 10,
     filter_category: args.category ?? null,
     filter_status: args.status === "all" ? null : (args.status ?? "active"),
+    filter_workspace: filterValue,
   });
   if (error) throw new Error(`Search failed: ${error.message}`);
-  if (!data || data.length === 0) return "No matching thoughts found.";
-  return data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
+  const header = scopeHeader(scope);
+  if (!data || data.length === 0) return `${header}\n\nNo matching thoughts found.`;
+  return `${header}\n\n` + data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
 }
 
 async function listRecent(args: {
   days?: number;
   category?: string;
   status?: string;
+  workspace?: string;
 }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 7));
+  const { scope, filterValue } = resolveScope(args.workspace);
 
   let query = supabase
     .from("thoughts")
-    .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(50);
@@ -103,12 +167,14 @@ async function listRecent(args: {
   }
 
   if (args.category) query = query.eq("category", args.category);
+  if (filterValue) query = query.or(`workspace.eq.${filterValue},workspace.is.null`);
 
   const { data, error } = await query;
   if (error) throw new Error(`List failed: ${error.message}`);
+  const header = scopeHeader(scope);
   if (!data || data.length === 0)
-    return `No thoughts captured in the last ${args.days ?? 7} days.`;
-  return `${data.length} thought(s) in the last ${args.days ?? 7} days:\n\n` +
+    return `${header}\n\nNo thoughts captured in the last ${args.days ?? 7} days.`;
+  return `${header}\n\n${data.length} thought(s) in the last ${args.days ?? 7} days:\n\n` +
     data.map((t: Record<string, unknown>) => formatThought(t)).join("\n\n---\n\n");
 }
 
@@ -117,13 +183,16 @@ async function captureThought(args: {
   source?: string;
   is_external?: boolean;
 }): Promise<string> {
+  const source = args.source ?? "mcp";
+  const is_external = args.is_external ?? false;
+  const workspace = deriveCaptureWorkspace(source, is_external);
   const res = await fetch(`${SUPABASE_URL}/functions/v1/process-thought`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SUPABASE_EDGE_FUNCTION_JWT}`,
     },
-    body: JSON.stringify({ text: args.text, source: args.source ?? "mcp", is_external: args.is_external ?? false }),
+    body: JSON.stringify({ text: args.text, source, is_external, workspace }),
   });
   const data = await res.json();
   if (data.duplicate) {
@@ -143,27 +212,36 @@ async function getStats(args: { days?: number }): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - (args.days ?? 30));
 
-  const [windowResult, allTimeResult] = await Promise.all([
+  const [windowResult, totalResult, activeResult, archivedResult, needsReviewResult] = await Promise.all([
+    // NOTE: fetches rows (not a count query), so this is subject to the same
+    // row cap the all-time counts below were fixed for, if capture volume
+    // ever grows past ~1000 within a single window.
     supabase
       .from("thoughts")
       .select("category, topics, created_at, status")
       .gte("created_at", since.toISOString()),
-    supabase
-      .from("thoughts")
-      .select("status"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "archived"),
+    supabase.from("thoughts").select("*", { count: "exact", head: true }).eq("status", "needs_review"),
   ]);
 
-  if (windowResult.error) throw new Error(`Stats failed: ${windowResult.error.message}`);
-  if (allTimeResult.error) throw new Error(`Stats failed: ${allTimeResult.error.message}`);
+  if (windowResult.error) throw new Error(`Stats failed (window): ${windowResult.error.message}`);
+  if (totalResult.error) throw new Error(`Stats failed (total count): ${totalResult.error.message}`);
+  if (activeResult.error) throw new Error(`Stats failed (active count): ${activeResult.error.message}`);
+  if (archivedResult.error) throw new Error(`Stats failed (archived count): ${archivedResult.error.message}`);
+  if (needsReviewResult.error) throw new Error(`Stats failed (needs_review count): ${needsReviewResult.error.message}`);
 
   const data = windowResult.data ?? [];
 
-  // All-time status counts
-  const statusCounts: Record<string, number> = {};
-  for (const t of allTimeResult.data ?? []) {
-    statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
-  }
-  const totalAllTime = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  // All-time status counts (each an independent exact count — immune to row caps)
+  const statusCounts: Record<string, number> = {
+    active: activeResult.count ?? 0,
+    archived: archivedResult.count ?? 0,
+    needs_review: needsReviewResult.count ?? 0,
+  };
+  const totalAllTime = totalResult.count ?? 0;
+  const unaccountedCount = totalAllTime - (statusCounts.active + statusCounts.archived + statusCounts.needs_review);
 
   // Time-windowed category and topic distribution
   const cats: Record<string, number> = {};
@@ -184,6 +262,9 @@ async function getStats(args: { days?: number }): Promise<string> {
   const reviewAlert = needsReviewCount > 0
     ? [`⚠ ${needsReviewCount} thought(s) need review — use get_needs_review to see them`, ""]
     : [];
+  const driftAlert = unaccountedCount !== 0
+    ? [`⚠ ${unaccountedCount} thought(s) with an unrecognized status — total doesn't match active+archived+needs_review`, ""]
+    : [];
 
   const lines = [
     "**Brain overview (all time)**",
@@ -191,6 +272,7 @@ async function getStats(args: { days?: number }): Promise<string> {
     ...["active", "archived", "needs_review"].map((s) => `  ${s}: ${statusCounts[s] ?? 0}`),
     "",
     ...reviewAlert,
+    ...driftAlert,
     `**Trends — last ${args.days ?? 30} days**`,
     `Captures this period: ${data.length}`,
     "",
@@ -290,8 +372,10 @@ async function deleteThought(args: { id: string }): Promise<string> {
 async function meetingPrep(args: {
   meeting: string;
   people?: string[];
+  workspace?: string;
 }): Promise<string> {
   const { meeting, people = [] } = args;
+  const { scope, filterValue } = resolveScope(args.workspace);
 
   const embedding = await generateEmbedding(meeting);
 
@@ -302,16 +386,19 @@ async function meetingPrep(args: {
       match_limit: 15,
       filter_category: null,
       filter_status: "active",
+      filter_workspace: filterValue,
     }),
-    ...people.map((person) =>
-      supabase
+    ...people.map((person) => {
+      let q = supabase
         .from("thoughts")
-        .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
+        .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
         .eq("status", "active")
         .contains("people", [person])
         .order("created_at", { ascending: false })
-        .limit(10)
-    ),
+        .limit(10);
+      if (filterValue) q = q.or(`workspace.eq.${filterValue},workspace.is.null`);
+      return q;
+    }),
   ]);
 
   if (semanticResult.error) throw new Error(`Search failed: ${semanticResult.error.message}`);
@@ -329,12 +416,13 @@ async function meetingPrep(args: {
     if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
   }
 
+  const header = scopeHeader(scope);
   if (merged.length === 0) {
-    return `No relevant context found for "${meeting}". Nothing captured about this yet.`;
+    return `${header}\n\nNo relevant context found for "${meeting}". Nothing captured about this yet.`;
   }
 
   const peopleLabel = people.length ? ` · people: ${people.join(", ")}` : "";
-  return `**Meeting prep context: "${meeting}"**${peopleLabel}\n(${merged.length} relevant thoughts)\n\n` +
+  return `${header}\n\n**Meeting prep context: "${meeting}"**${peopleLabel}\n(${merged.length} relevant thoughts)\n\n` +
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
 }
 
@@ -426,17 +514,22 @@ async function listWikiPages(args: { entity_type?: string }): Promise<string> {
   return [header, divider, ...rows].join("\n");
 }
 
-async function getContext(args: { topic: string }): Promise<string> {
+async function getContext(args: { topic: string; workspace?: string }): Promise<string> {
+  const { scope, filterValue } = resolveScope(args.workspace);
+
   // Combine semantic search + keyword match on topics array
+  let keywordQuery = supabase
+    .from("thoughts")
+    .select("id, title, summary, category, people, topics, action_items, urls, source, workspace, created_at")
+    .eq("status", "active")
+    .contains("topics", [args.topic])
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (filterValue) keywordQuery = keywordQuery.or(`workspace.eq.${filterValue},workspace.is.null`);
+
   const [embedding, keywordResult] = await Promise.all([
     generateEmbedding(args.topic),
-    supabase
-      .from("thoughts")
-      .select("id, title, summary, category, people, topics, action_items, urls, source, created_at")
-      .eq("status", "active")
-      .contains("topics", [args.topic])
-      .order("created_at", { ascending: false })
-      .limit(20),
+    keywordQuery,
   ]);
 
   const { data: semanticData, error: semErr } = await supabase.rpc("semantic_search", {
@@ -444,6 +537,7 @@ async function getContext(args: { topic: string }): Promise<string> {
     match_limit: 20,
     filter_category: null,
     filter_status: "active",
+    filter_workspace: filterValue,
   });
   if (semErr) throw new Error(`Context search failed: ${semErr.message}`);
 
@@ -457,15 +551,144 @@ async function getContext(args: { topic: string }): Promise<string> {
     if (!seen.has(t.id as string)) { seen.add(t.id as string); merged.push(t); }
   }
 
-  if (merged.length === 0) return `No context found for "${args.topic}".`;
-  return `**Context for "${args.topic}"** (${merged.length} thoughts)\n\n` +
+  const header = scopeHeader(scope);
+  if (merged.length === 0) return `${header}\n\nNo context found for "${args.topic}".`;
+  return `${header}\n\n**Context for "${args.topic}"** (${merged.length} thoughts)\n\n` +
     merged.map((t) => formatThought(t)).join("\n\n---\n\n");
+}
+
+// ── find_by_url ───────────────────────────────────────────────────────────────
+//
+// Deterministic URL lookup. semantic_search matches meaning and is blind to URL
+// strings; this canonicalizes the caller's input into a single substring match key and
+// hands it to the find_by_url RPC (server-side literal match on urls[]). YouTube is the
+// one special case — the only major source that puts identity in the query string (?v=)
+// rather than the path — so its links resolve to the bare 11-char video ID, unifying
+// youtu.be / watch?v= / ?si= / shorts / embed forms. Every other host is path-identified,
+// so we match on host+path and drop the (tracking-only) query string and fragment.
+
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const MIN_KEY_LEN = 4;
+const YT_HOSTS = new Set(["youtube.com", "m.youtube.com", "music.youtube.com"]);
+
+// PostgREST caps responses at 1000 rows (supabase/config.toml max_rows); the RPC is
+// paginated to fetch complete result sets past that cap, aborting past the safety cap
+// rather than looping forever. Mirrors compile_wiki.py's supabase_get.
+const POSTGREST_PAGE_SIZE = 1000;
+const POSTGREST_SAFETY_CAP = 10000;
+
+function keyOrTooBroad(key: string): { key: string } | { error: string } {
+  const k = key.trim();
+  if (k.length < MIN_KEY_LEN) {
+    return { error: `Query too broad — match key "${k}" is under ${MIN_KEY_LEN} chars. Provide a fuller URL or a bare 11-char video ID.` };
+  }
+  return { key: k };
+}
+
+function canonicalizeUrlKey(input: string): { key: string } | { error: string } {
+  const raw = input.trim();
+  if (!raw) return { error: "Empty url." };
+
+  // Bare 11-char YouTube ID (no scheme/host) — use directly as the match key.
+  if (YT_ID_RE.test(raw)) return { key: raw };
+
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(raw.includes("://") ? raw : `https://${raw}`);
+  } catch {
+    parsed = null;
+  }
+
+  if (parsed) {
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "youtu.be") {
+      const id = parsed.pathname.replace(/^\/+/, "").split("/")[0];
+      if (id) return keyOrTooBroad(id);
+    }
+    if (YT_HOSTS.has(host)) {
+      const v = parsed.searchParams.get("v");
+      if (v) return keyOrTooBroad(v);
+      const m = parsed.pathname.match(/\/(?:embed|shorts|live|v)\/([^/?#]+)/);
+      if (m) return keyOrTooBroad(m[1]);
+    }
+    // Non-YouTube: identity is the path. Match on host+path, dropping query + fragment.
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return keyOrTooBroad(`${host}${path}`);
+  }
+
+  // Not URL-parseable and not a bare ID — fall back to the literal string as the key.
+  return keyOrTooBroad(raw);
+}
+
+async function findByUrl(args: {
+  url: string;
+  status?: string;
+  limit?: number;
+}): Promise<string> {
+  const canon = canonicalizeUrlKey(args.url);
+  if ("error" in canon) return canon.error;
+  const key = canon.key;
+
+  const status = args.status ?? "all";
+  const filterStatus = status === "all" ? null : status;
+  const limit = args.limit ?? 100;
+
+  // Paginate-to-exhaustion against the server-side-filtering RPC. It returns only
+  // matching rows, so pagination only engages for very broad keys (e.g. a bare domain
+  // matching every article from a source); a normal URL finishes in one page.
+  const rows: Record<string, unknown>[] = [];
+  let offset = 0;
+  while (rows.length < limit) {
+    const pageSize = Math.min(POSTGREST_PAGE_SIZE, limit - rows.length);
+    const { data, error } = await supabase.rpc("find_by_url", {
+      match_key: key,
+      filter_status: filterStatus,
+      match_limit: pageSize,
+      match_offset: offset,
+    });
+    if (error) throw new Error(`find_by_url failed: ${error.message}`);
+    const page = (data ?? []) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < pageSize) break; // exhausted
+    offset += page.length;
+    if (offset > POSTGREST_SAFETY_CAP) {
+      throw new Error(`find_by_url exceeded safety cap of ${POSTGREST_SAFETY_CAP} rows for key "${key}"`);
+    }
+  }
+
+  const statusLabel = status === "all" ? "" : ` · status: ${status}`;
+  if (rows.length === 0) {
+    return `No thoughts reference \`${key}\`${statusLabel}.`;
+  }
+
+  // Group by source label — the dedup verdict is "which sources already hold this URL,
+  // and do they include real insight captures (not just a reminder)?"
+  const bySource = new Map<string, Record<string, unknown>[]>();
+  for (const t of rows) {
+    const src = (t.source as string) ?? "unknown";
+    if (!bySource.has(src)) bySource.set(src, []);
+    bySource.get(src)!.push(t);
+  }
+
+  const header = `**${rows.length} thought(s) across ${bySource.size} source(s) reference \`${key}\`**${statusLabel}`;
+  const blocks = [...bySource.entries()].map(([src, group]) => {
+    const activeInsights = group.filter(
+      (t) => t.status === "active" && t.category === "insight",
+    ).length;
+    const signal = activeInsights > 0 ? ` · ${activeInsights} active insight(s) — likely already panned` : "";
+    const rowsText = group
+      .map((t) => `${formatThought(t)}\nStatus: ${t.status}${t.is_external ? " · External" : ""}`)
+      .join("\n\n");
+    return `### ${src} — ${group.length} thought(s)${signal}\n\n${rowsText}`;
+  });
+
+  return [header, "", ...blocks].join("\n\n").trimEnd();
 }
 
 // ── MCP Server ────────────────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "second-brain", version: "1.5.0" },
+  { name: "second-brain", version: "1.6.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -489,6 +712,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["active", "archived", "all"],
             description: "Filter by status (default: active)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["query"],
       },
@@ -510,6 +734,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ["active", "archived", "all"],
             description: "Filter by status (default: active)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
       },
     },
@@ -584,6 +809,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: "object",
         properties: {
           topic: { type: "string", description: "The topic to gather context on" },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["topic"],
       },
@@ -639,6 +865,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "find_by_url",
+      description: "Deterministically find every thought that references a given URL (or bare 11-char YouTube video ID). Unlike semantic_search (meaning-based, blind to URL strings), this matches on the urls[] field: YouTube links resolve to their video ID so youtu.be, watch?v=, ?si= tracking, shorts, and embed forms all unify to the same source; other URLs match on host+path with query/tracking params ignored. Use this as the authoritative dedup check before panning a source. Defaults to status 'all' so already-archived reminders — the strongest 'already panned' signal — are included.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "A URL, or a bare 11-char YouTube video ID. youtu.be / youtube.com / m. / music. / shorts / embed / live forms all work; non-YouTube URLs match on host+path." },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Filter by status (default: all — includes archived reminders)",
+          },
+          limit: { type: "number", description: "Max rows to return (default 100). Paginates internally; a bare domain can match many." },
+        },
+        required: ["url"],
+      },
+    },
+    {
       name: "meeting_prep",
       description: "Pull all relevant context from your brain to prepare for a meeting. Combines semantic search on the meeting topic with people-specific lookups. Returns raw context; Claude synthesizes the prep brief.",
       inputSchema: {
@@ -650,6 +893,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: "string" },
             description: "Names of people in the meeting to look up explicitly (optional but improves recall)",
           },
+          workspace: WORKSPACE_ARG_SCHEMA,
         },
         required: ["meeting"],
       },
@@ -702,6 +946,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "meeting_prep":
         text = await meetingPrep(a as Parameters<typeof meetingPrep>[0]);
+        break;
+      case "find_by_url":
+        text = await findByUrl(a as Parameters<typeof findByUrl>[0]);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

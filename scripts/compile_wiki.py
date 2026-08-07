@@ -13,6 +13,8 @@ Usage:
   python scripts/compile_wiki.py --strict
   python scripts/compile_wiki.py --skip-existing
   python scripts/compile_wiki.py --skip-unchanged
+  python scripts/compile_wiki.py --skip-unchanged --cadence-days 90
+  python scripts/compile_wiki.py --all --skip-unchanged --git-publish
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
   python scripts/compile_wiki.py --skip-projects
@@ -22,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 import urllib.error
@@ -30,11 +33,31 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-SONNET_MODEL = "claude-sonnet-4-6"
+SONNET_MODEL = "claude-sonnet-5"
 DEFAULT_TOPIC_THRESHOLD = 5
 DEFAULT_PERSON_THRESHOLD = 2
 DEFAULT_PROJECT_THRESHOLD = 2
-OUTPUT_DIR = Path(__file__).parent.parent / "compiled-wiki"
+OUTPUT_DIR = Path(__file__).parent.parent / "compiled_wiki"
+
+# A person page is "content creator" if most of their mentions are external content
+# (source I read) rather than interactions (person I work with) — see
+# plans/in_progress/wiki_compile_cost_control.md. These pages recompile on a slower
+# cadence under --skip-unchanged since their high-value content (cross-topic framework
+# synthesis) changes far slower than their thought count does.
+CONTENT_CREATOR_EXTERNAL_THRESHOLD = 0.5
+CONTENT_CREATOR_CADENCE_DAYS = 90
+
+# Mirrors EXTERNAL_SOURCE_PATTERN in mcp/src/server.ts — external content is deliberately
+# never stamped with a workspace (a /pan run must not inherit whatever repo it ran from),
+# so it must not be reported as a missing-workspace mistake. Keep the two lists in sync.
+EXTERNAL_SOURCE_RE = re.compile(
+    r"^(youtube|substack|article|github|synthesis|danshapiro|simonwillison):", re.IGNORECASE
+)
+
+# PostgREST caps any single response at max_rows (supabase/config.toml). supabase_get()
+# pages past this transparently — see its docstring.
+POSTGREST_PAGE_SIZE = 1000
+POSTGREST_SAFETY_CAP = 50000
 
 
 class SystemicAPIError(Exception):
@@ -226,12 +249,76 @@ def load_env() -> dict:
     return env
 
 
-def load_aliases() -> tuple[dict, dict, dict]:
+def load_aliases() -> tuple[dict, dict, dict, set]:
     scripts_dir = Path(__file__).parent
-    people = json.loads((scripts_dir / "people_aliases.json").read_text("utf-8")) if (scripts_dir / "people_aliases.json").exists() else {}
+    people_raw = json.loads((scripts_dir / "people_aliases.json").read_text("utf-8")) if (scripts_dir / "people_aliases.json").exists() else {}
     topics = json.loads((scripts_dir / "topic_aliases.json").read_text("utf-8")) if (scripts_dir / "topic_aliases.json").exists() else {}
     projects = json.loads((scripts_dir / "project_definitions.json").read_text("utf-8")) if (scripts_dir / "project_definitions.json").exists() else {}
-    return people, topics, projects
+    people, people_excluded = normalize_people_aliases(people_raw)
+    return people, topics, normalize_project_overrides(projects), people_excluded
+
+
+def normalize_people_aliases(raw: dict) -> tuple[dict, set]:
+    """Split people_aliases.json into the variant->canonical string map (unchanged
+    meaning) and the set of canonical names flagged exclude:true (new).
+
+    A string value keeps today's shape: `"variant": "canonical name"`. An object value
+    means the key IS the canonical/entity name being configured, not a variant, e.g.
+    `"Matt Wolfe": {"exclude": true}` excludes that page from --all regardless of
+    thought_count/threshold. Mirrors normalize_project_overrides's string|object shape.
+    """
+    aliases: dict = {}
+    excluded: set = set()
+    for key, value in (raw or {}).items():
+        if isinstance(value, str):
+            aliases[key] = value
+        elif dict(value).get("exclude"):
+            excluded.add(key)
+    return aliases, excluded
+
+
+def normalize_project_overrides(raw: dict) -> dict:
+    """Normalize the project display-name override map to one shape: {workspace: {"title": str}}.
+
+    Accepts `"workspace": "Title"` (shorthand) or `"workspace": {"title": ...}` (room to
+    grow — per-project threshold/exclude/description can be added later without rewriting
+    the file or touching consumers). The file is entirely optional: projects are discovered
+    from the `workspace` column, and an absent override just means a titlecased slug.
+    """
+    out: dict = {}
+    for workspace, value in (raw or {}).items():
+        out[workspace] = {"title": value} if isinstance(value, str) else dict(value)
+    return out
+
+
+# `workspace` carries two different meanings in this system and they must never be confused:
+#   - retrieval (semantic_search, migration 007): NULL means "global, always eligible", so a
+#     workspace-scoped search still surfaces unscoped notes.
+#   - categorization (project pages, here): a page is a claim about what belongs to a project.
+#     Inheriting the NULL-is-global rule would put all ~1900 unscoped thoughts on every page.
+# Hence two explicitly named helpers rather than an inline comparison at each call site.
+
+def matches_workspace_strict(thought: dict, workspace: str) -> bool:
+    """Categorization: exact membership only. NULL is NOT a match."""
+    return thought.get("workspace") == workspace
+
+
+def matches_workspace_global(thought: dict, workspace: str) -> bool:
+    """Retrieval: the migration-007 semantic — the workspace plus unscoped/global thoughts."""
+    ws = thought.get("workspace")
+    return ws == workspace or ws is None
+
+
+def project_slug(workspace: str) -> str:
+    """Page identity derives from the workspace slug, never the display title — a title is
+    cosmetic, and deriving identity from it means editing an override silently forks the page
+    and orphans the old one (invisible under an unattended cron)."""
+    return f"project-{workspace.replace('_', '-')}"
+
+
+def project_title(workspace: str, project_defs: dict) -> str:
+    override = (project_defs.get(workspace) or {}).get("title")
+    return override or workspace.replace("_", " ").title()
 
 
 def build_reverse_map(aliases: dict) -> dict:
@@ -266,21 +353,44 @@ def fmt_elapsed(seconds: int) -> str:
 # ── Supabase ─────────────────────────────────────────────────────────────────
 
 def supabase_get(url: str, key: str, path: str, params: dict) -> list:
-    qs = urllib.parse.urlencode(params)
-    req = urllib.request.Request(
-        f"{url}{path}?{qs}",
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode("utf-8")
-        raise RuntimeError(f"Supabase GET {path} error {e.code}: {raw}") from e
+    """Fetch every row matching `params`, transparently paginating past PostgREST's
+    max_rows cap (supabase/config.toml: max_rows = 1000) via repeated offset/limit
+    requests. `params["limit"]` is treated as a per-page size hint (clamped to
+    POSTGREST_PAGE_SIZE), not a total-result cap — callers always get the complete
+    result set, not whatever number they happened to pass. Ordering must be
+    deterministic (callers append `,id.asc` as a tiebreaker) or pages can skip/
+    duplicate rows. Aborts past POSTGREST_SAFETY_CAP rows rather than looping forever.
+    """
+    page_size = min(int(params.get("limit", POSTGREST_PAGE_SIZE)), POSTGREST_PAGE_SIZE)
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    results: list = []
+    offset = 0
+    while True:
+        page_params = dict(params)
+        page_params["limit"] = str(page_size)
+        page_params["offset"] = str(offset)
+        qs = urllib.parse.urlencode(page_params)
+        req = urllib.request.Request(f"{url}{path}?{qs}", headers=headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                page = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            raise RuntimeError(f"Supabase GET {path} error {e.code}: {raw}") from e
+        results.extend(page)
+        if len(page) < page_size:
+            break
+        if len(results) > POSTGREST_SAFETY_CAP:
+            raise RuntimeError(
+                f"Supabase GET {path}: exceeded safety cap of {POSTGREST_SAFETY_CAP} rows "
+                f"without exhausting results — aborting (possible pagination bug or runaway query)"
+            )
+        offset += page_size
+    return results
 
 
 def supabase_upsert(url: str, key: str, data: dict) -> dict:
@@ -324,6 +434,10 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
     body = json.dumps({
         "model": SONNET_MODEL,
         "max_tokens": 8192,
+        # Thinking stays disabled: adaptive thinking exhausts max_tokens on the
+        # largest pages and returns zero text (A/B tested 2026-07-24, see
+        # plans/done/wiki_thinking_ab_test.md). Do not enable without raising max_tokens.
+        "thinking": {"type": "disabled"},
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_content}],
     }).encode("utf-8")
@@ -341,7 +455,10 @@ def call_sonnet(anthropic_key: str, system_prompt: str, user_content: str) -> st
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                return data["content"][0]["text"].strip()
+                text_block = next((b for b in data["content"] if b.get("type") == "text"), None)
+                if text_block is None:
+                    raise ValueError(f"No text block in response content: {data['content']}")
+                return text_block["text"].strip()
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8")
             if e.code in _SYSTEMIC_CODES:
@@ -365,7 +482,11 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
         req = urllib.request.Request(
             "https://discord.com/api/v10/users/@me/channels",
             data=body,
-            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/Oniwa/second_brain, 1.0)",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -376,7 +497,11 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
         req = urllib.request.Request(
             f"https://discord.com/api/v10/channels/{channel_id}/messages",
             data=body,
-            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/Oniwa/second_brain, 1.0)",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -387,7 +512,7 @@ def send_discord_dm(token: str, user_id: str, message: str) -> None:
 
 def _build_dm(compiled: int, errors: int, error_details: list[str],
               elapsed_s: int, run_ts: str, aborted: bool = False,
-              abort_reason: str = "") -> str:
+              abort_reason: str = "", publish_note: str = "") -> str:
     if aborted:
         lines = [
             f"🧠 Wiki compile ABORTED — {run_ts}",
@@ -407,7 +532,41 @@ def _build_dm(compiled: int, errors: int, error_details: list[str],
             f"✅ Compiled: {compiled} page(s)",
             f"⏱ {fmt_elapsed(elapsed_s)}",
         ]
+    if publish_note:
+        lines.append(publish_note)
     return "\n".join(lines)
+
+
+def git_publish_wiki(compiled_count: int) -> str:
+    """Commit + push compiled_wiki/ if --git-publish was set and something changed.
+    Returns a status line for the completion DM, or "" if there was nothing to publish.
+    Never raises — a broken publish setup must surface in the DM, not crash an
+    otherwise-successful compile run (the DB, not the mirror, is the source of truth)."""
+    repo_dir = OUTPUT_DIR
+    if not (repo_dir / ".git").exists():
+        return f"⚠️ --git-publish requested but {repo_dir} is not a git repo — nothing pushed"
+
+    status = subprocess.run(["git", "-C", str(repo_dir), "status", "--porcelain"],
+                             capture_output=True, text=True)
+    if status.returncode != 0:
+        return f"⚠️ git-publish: status check failed: {status.stderr.strip()[:200]}"
+    if not status.stdout.strip():
+        return ""
+
+    commit_msg = f"Weekly wiki recompile {datetime.now(timezone.utc).strftime('%Y-%m-%d')} — {compiled_count} page(s) updated"
+    for cmd in (
+        ["git", "-C", str(repo_dir), "add", "-A"],
+        ["git", "-C", str(repo_dir), "commit", "-m", commit_msg],
+    ):
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            return f"⚠️ git-publish failed ({cmd[3]}): {r.stderr.strip()[:200]}"
+
+    push = subprocess.run(["git", "-C", str(repo_dir), "push"], capture_output=True, text=True)
+    if push.returncode != 0:
+        return f"⚠️ git-publish: push failed: {push.stderr.strip()[:200]}"
+
+    return f"📤 Published to compiled_wiki: {commit_msg}"
 
 
 # ── Thought fetching ──────────────────────────────────────────────────────────
@@ -418,8 +577,8 @@ def fetch_thoughts_for_topic(supabase_url: str, key: str, topic: str) -> list:
         "category": "neq.admin",
         "topics": f"cs.{{{topic}}}",
         "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.asc",
-        "limit": "500",
+        "order": "created_at.asc,id.asc",
+        "limit": "1000",
     })
 
 
@@ -428,20 +587,21 @@ def fetch_thoughts_for_person(supabase_url: str, key: str, person: str) -> list:
         "status": "eq.active",
         "people": f"cs.{{{person}}}",
         "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.asc",
-        "limit": "500",
+        "order": "created_at.asc,id.asc",
+        "limit": "1000",
     })
 
 
-def fetch_thoughts_for_project(supabase_url: str, key: str, anchor_topics: list) -> list:
-    thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
+def fetch_thoughts_for_project(supabase_url: str, key: str, workspace: str) -> list:
+    """A project IS a workspace — membership is strict equality on the workspace column.
+    Anchor-topic matching was retired 2026-07-26 (see project_page_implementation.md)."""
+    return supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,created_at,raw_text",
-        "order": "created_at.desc",
-        "limit": "500",
+        "workspace": f"eq.{workspace}",
+        "select": "id,title,summary,category,people,topics,action_items,urls,is_external,source,workspace,created_at,raw_text",
+        "order": "created_at.desc,id.asc",
+        "limit": "1000",
     })
-    anchor_set = {t.lower() for t in anchor_topics}
-    return [t for t in thoughts if anchor_set & {tag.lower() for tag in (t.get("topics") or [])}]
 
 
 def fetch_all_for_entity(fetch_fn, supabase_url: str, key: str, variants: list) -> list:
@@ -500,7 +660,8 @@ def get_distinct_topics(supabase_url: str, key: str, topic_aliases: dict) -> dic
         "status": "eq.active",
         "category": "neq.admin",
         "select": "topics",
-        "limit": "2000",
+        "order": "id.asc",
+        "limit": "1000",
     })
     counts: dict = {}
     for t in thoughts:
@@ -511,50 +672,92 @@ def get_distinct_topics(supabase_url: str, key: str, topic_aliases: dict) -> dic
 
 
 def get_distinct_people(supabase_url: str, key: str, people_aliases: dict) -> dict:
+    """Returns {canonical_person: {"count": N, "external": M}}. `external` counts
+    mentions from is_external thoughts or an EXTERNAL_SOURCE_RE-matching source —
+    used to classify content-creator pages for cadence control (see
+    CONTENT_CREATOR_EXTERNAL_THRESHOLD)."""
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "people",
-        "limit": "2000",
+        "select": "people,is_external,source",
+        "order": "id.asc",
+        "limit": "1000",
     })
-    counts: dict = {}
+    stats: dict = {}
     for t in thoughts:
+        is_ext = bool(t.get("is_external")) or bool(EXTERNAL_SOURCE_RE.match(t.get("source") or ""))
         for person in t.get("people") or []:
             canonical = people_aliases.get(person, person)
-            counts[canonical] = counts.get(canonical, 0) + 1
-    return counts
+            entry = stats.setdefault(canonical, {"count": 0, "external": 0})
+            entry["count"] += 1
+            if is_ext:
+                entry["external"] += 1
+    return stats
+
+
+def is_content_creator(stats: dict) -> bool:
+    count = stats["count"]
+    return count > 0 and (stats["external"] / count) >= CONTENT_CREATOR_EXTERNAL_THRESHOLD
+
+
+def days_since(iso_ts: str) -> float:
+    dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+    return (datetime.now(timezone.utc) - dt).total_seconds() / 86400
 
 
 def get_qualifying_projects(supabase_url: str, key: str, project_defs: dict, threshold: int) -> dict:
-    """Returns {project_name: thought_count} for projects meeting threshold."""
+    """Returns {workspace_slug: thought_count} for workspaces meeting threshold.
+
+    Projects are auto-discovered from the distinct `workspace` values present in the data —
+    being captured in a repo is sufficient to get a page. This is the fix for the original
+    defect, where a project silently had no page purely because nobody had added it to a
+    hand-maintained config file. `project_defs` supplies display names only, and never gates
+    which projects exist.
+    """
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "id,topics",
-        "limit": "2000",
+        "workspace": "not.is.null",
+        "select": "id,workspace",
+        "order": "id.asc",
+        "limit": "1000",
     })
-    result = {}
-    for project_name, anchor_topics in project_defs.items():
-        anchor_set = {t.lower() for t in anchor_topics}
-        count = sum(1 for t in thoughts if anchor_set & {tag.lower() for tag in (t.get("topics") or [])})
-        if count >= threshold:
-            result[project_name] = count
-    return result
+    counts: dict = {}
+    for t in thoughts:
+        ws = t.get("workspace")
+        if ws:
+            counts[ws] = counts.get(ws, 0) + 1
+    excluded = {ws for ws, cfg in project_defs.items() if cfg.get("exclude")}
+    return {ws: n for ws, n in counts.items() if n >= threshold and ws not in excluded}
 
 
 def get_unmatched_project_thoughts(supabase_url: str, key: str, project_defs: dict) -> list:
-    """Returns project-category thoughts not covered by any project definition."""
+    """Project-category thoughts that carry no workspace, so they reach no project page.
+
+    Under workspace-only scoping this is the new silent-failure mode: a thought captured
+    outside its repo (Discord, a /pan run, a sibling repo) lands with workspace=NULL and
+    quietly misses its project. External content is excluded — deriveCaptureWorkspace
+    (mcp/src/server.ts) keeps it global by design, so it is not a scoping mistake.
+
+    NOTE: only surfaced in --dry-run today. Wiring it into the cron's Discord notification,
+    plus workspace editing via update_thought, is tracked in
+    plans/in_progress/workspace_correction_and_diagnostic.md (roadmap #3).
+    """
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
         "category": "eq.project",
-        "select": "id,title,topics",
-        "limit": "500",
+        "workspace": "is.null",
+        "select": "id,title,topics,is_external,source",
+        "order": "id.asc",
+        "limit": "1000",
     })
-    all_anchors = {t.lower() for anchors in project_defs.values() for t in anchors}
-    return [t for t in thoughts if not (all_anchors & {tag.lower() for tag in (t.get("topics") or [])})]
+    return [t for t in thoughts
+            if not t.get("is_external")
+            and not EXTERNAL_SOURCE_RE.match(t.get("source") or "")]
 
 
 def get_existing_pages(supabase_url: str, key: str) -> dict:
     pages = supabase_get(supabase_url, key, "/rest/v1/wiki_pages", {
         "select": "slug,title,entity_type,entity_name,thought_count,stale,last_compiled_at",
+        "order": "id.asc",
         "limit": "1000",
     })
     return {p["slug"]: p for p in pages}
@@ -629,25 +832,25 @@ def compile_single_person(env: dict, canonical: str, variants: list, dry_run: bo
     print("done")
 
 
-def compile_single_project(env: dict, project_name: str, anchor_topics: list, dry_run: bool) -> None:
-    slug = slugify(project_name, "project")
-    thoughts = fetch_thoughts_for_project(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], anchor_topics)
+def compile_single_project(env: dict, workspace: str, title: str, dry_run: bool) -> None:
+    slug = project_slug(workspace)
+    thoughts = fetch_thoughts_for_project(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], workspace)
     n = len(thoughts)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if dry_run:
-        print(f"[dry-run] project: {project_name} -- {n} thoughts -> {slug}.md")
+        print(f"[dry-run] project: {title} ({workspace}) -- {n} thoughts -> {slug}.md")
         return
 
-    print(f"Compiling project: {project_name} ({n} thoughts)...", end=" ", flush=True)
+    print(f"Compiling project: {title} ({n} thoughts)...", end=" ", flush=True)
     fenced = fence_thoughts(thoughts)
     user_content = (
-        f"Compile a project page for: {project_name}\n"
+        f"Compile a project page for: {title}\n"
         f"Thought count: {n}\nDate: {today}\n\n"
         f"<thoughts>\n{fenced}\n</thoughts>"
     )
     content = call_sonnet(env["ANTHROPIC_API_KEY"], PROJECT_SYSTEM_PROMPT, user_content)
-    write_page(env, slug, "project", project_name, content, n)
+    write_page(env, slug, "project", title, content, n)
     print("done")
 
 
@@ -656,7 +859,7 @@ def compile_single_project(env: dict, project_name: str, anchor_topics: list, dr
 def cmd_list(env: dict) -> None:
     pages = supabase_get(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], "/rest/v1/wiki_pages", {
         "select": "slug,title,entity_type,thought_count,stale,last_compiled_at",
-        "order": "entity_type.asc,thought_count.desc",
+        "order": "entity_type.asc,thought_count.desc,id.asc",
         "limit": "1000",
     })
     if not pages:
@@ -671,13 +874,32 @@ def cmd_list(env: dict) -> None:
     print(f"\nTotal: {len(pages)} page(s)")
 
 
-def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_aliases: dict, project_defs: dict) -> None:
+def person_skip_reason(existing_page: dict, count: int, stats: dict, cadence_days: float, skip_unchanged: bool) -> str:
+    """Returns a skip reason if --skip-unchanged would skip this person page in cmd_all,
+    or "" if it should compile. Content-creator pages additionally hold at their current
+    content even after a thought_count change until cadence_days have passed since
+    last_compiled_at — see CONTENT_CREATOR_EXTERNAL_THRESHOLD. Shared by the --dry-run
+    report and the live --all loop so the two never drift apart."""
+    if not skip_unchanged or not existing_page:
+        return ""
+    if existing_page["thought_count"] == count:
+        return "unchanged"
+    if is_content_creator(stats) and existing_page.get("last_compiled_at"):
+        elapsed = days_since(existing_page["last_compiled_at"])
+        if elapsed < cadence_days:
+            return f"cadence: {elapsed:.0f}d/{cadence_days:.0f}d since last compile"
+    return ""
+
+
+def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_aliases: dict,
+            project_defs: dict, people_excluded: set) -> None:
     run_start = datetime.now(timezone.utc)
     run_ts = run_start.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     min_topic = args.min_thoughts if args.min_thoughts is not None else DEFAULT_TOPIC_THRESHOLD
     min_person = args.min_thoughts if args.min_thoughts is not None else DEFAULT_PERSON_THRESHOLD
     min_project = DEFAULT_PROJECT_THRESHOLD
+    cadence_days = args.cadence_days if args.cadence_days is not None else CONTENT_CREATOR_CADENCE_DAYS
     people_reverse = build_reverse_map(people_aliases)
     topic_reverse = build_reverse_map(topic_aliases)
     existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
@@ -685,6 +907,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     topics_above: dict = {}
     topics_below: dict = {}
     people_above: dict = {}
+    people_stats: dict = {}
     projects_above: dict = {}
 
     if not args.skip_topics:
@@ -696,12 +919,12 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
                 topics_below[topic] = count
 
     if not args.skip_people:
-        all_people = get_distinct_people(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], people_aliases)
-        for person, count in all_people.items():
-            if count >= min_person:
-                people_above[person] = count
+        people_stats = get_distinct_people(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], people_aliases)
+        for person, stats in people_stats.items():
+            if stats["count"] >= min_person and person not in people_excluded:
+                people_above[person] = stats["count"]
 
-    if not args.skip_projects and project_defs:
+    if not args.skip_projects:
         projects_above = get_qualifying_projects(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs, min_project)
 
     def stale_marker(slug: str, count: int) -> str:
@@ -717,25 +940,28 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             print(f"  {topic:<48} {count:>3} thoughts{stale_marker(slug, count)}")
         for person, count in sorted(people_above.items(), key=lambda x: -x[1]):
             slug = slugify(person, "person")
-            print(f"  {person:<48} {count:>3} thoughts{stale_marker(slug, count)}")
-        for project, count in sorted(projects_above.items(), key=lambda x: -x[1]):
-            slug = slugify(project, "project")
-            print(f"  {project:<48} {count:>3} thoughts{stale_marker(slug, count)}")
+            reason = person_skip_reason(existing.get(slug), count, people_stats[person], cadence_days, args.skip_unchanged)
+            skip_note = f"  [SKIP: {reason}]" if reason else ""
+            print(f"  {person:<48} {count:>3} thoughts{stale_marker(slug, count)}{skip_note}")
+        for workspace, count in sorted(projects_above.items(), key=lambda x: -x[1]):
+            slug = project_slug(workspace)
+            label = f"{project_title(workspace, project_defs)} ({workspace})"
+            print(f"  {label:<48} {count:>3} thoughts{stale_marker(slug, count)}")
 
         if topics_below:
             print(f"\nSKIPPED — below threshold of {min_topic} ({len(topics_below)} topics):\n")
             for topic, count in sorted(topics_below.items(), key=lambda x: -x[1]):
                 print(f'  {topic:<48} {count:>3} thoughts  -> --topic "{topic}" --min-thoughts {count}')
 
-        if not args.skip_projects and project_defs:
+        if not args.skip_projects:
             unmatched = get_unmatched_project_thoughts(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs)
             if unmatched:
-                print(f"\nUNMATCHED PROJECT THOUGHTS (not covered by any definition):\n")
+                print(f"\nPROJECT THOUGHTS WITH NO WORKSPACE ({len(unmatched)} — these reach no project page):\n")
                 for t in unmatched:
                     topics_str = ", ".join(t.get("topics") or [])
                     title = (t.get("title") or "")[:50]
-                    print(f'  "{title}"  [{topics_str}]')
-                print("  -> Add these to project_definitions.json to include them on a project page")
+                    print(f'  {t["id"][:8]}  "{title}"  [{topics_str}]')
+                print("  -> Captured outside a project repo. Set the workspace to attach them to a project.")
 
         print(f"\nTotal: {len(topics_above) + len(people_above) + len(projects_above)} pages would compile, {len(topics_below)} topics skipped")
         return
@@ -747,6 +973,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     errors = 0
     skipped_existing = 0
     skipped_unchanged = 0
+    skipped_cadence = 0
     error_details: list[str] = []
 
     discord_token = env.get("DISCORD_BOT_TOKEN")
@@ -759,9 +986,14 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         elapsed_s = elapsed_now()
         finish_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         print(f"Finished: {finish_ts} ({fmt_elapsed(elapsed_s)})")
+        publish_note = ""
+        if not aborted and args.git_publish:
+            publish_note = git_publish_wiki(compiled)
+            if publish_note:
+                print(publish_note)
         if discord_token and discord_user:
             dm = _build_dm(compiled, errors, error_details, elapsed_s, run_ts,
-                           aborted=aborted, abort_reason=abort_reason)
+                           aborted=aborted, abort_reason=abort_reason, publish_note=publish_note)
             send_discord_dm(discord_token, discord_user, dm)
         sys.exit(exit_code)
 
@@ -792,8 +1024,12 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
-        if args.skip_unchanged and slug in existing and existing[slug]["thought_count"] == count:
+        skip_reason = person_skip_reason(existing.get(slug), count, people_stats[person], cadence_days, args.skip_unchanged)
+        if skip_reason == "unchanged":
             skipped_unchanged += 1
+            continue
+        if skip_reason:
+            skipped_cadence += 1
             continue
         try:
             variants = people_reverse.get(person, [person])
@@ -809,8 +1045,8 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
 
-    for project, count in sorted(projects_above.items(), key=lambda x: -x[1]):
-        slug = slugify(project, "project")
+    for workspace, count in sorted(projects_above.items(), key=lambda x: -x[1]):
+        slug = project_slug(workspace)
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
@@ -818,8 +1054,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             skipped_unchanged += 1
             continue
         try:
-            anchor_topics = project_defs[project]
-            compile_single_project(env, project, anchor_topics, dry_run=False)
+            compile_single_project(env, workspace, project_title(workspace, project_defs), dry_run=False)
             compiled += 1
         except SystemicAPIError as e:
             print(f"\n  ABORT (systemic): {e}", file=sys.stderr)
@@ -827,18 +1062,20 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             notify_and_exit(aborted=True, abort_reason=str(e), exit_code=1)
         except Exception as e:
             errors += 1
-            detail = f"• project:{project}: {e}"
+            detail = f"• project:{workspace}: {e}"
             error_details.append(detail)
             print(f"  ✗ {e}", file=sys.stderr)
 
     n_topics = sum(1 for t in topics_above if not (args.skip_existing and slugify(t, "topic") in existing))
     n_people = sum(1 for p in people_above if not (args.skip_existing and slugify(p, "person") in existing))
-    n_projects = sum(1 for p in projects_above if not (args.skip_existing and slugify(p, "project") in existing))
+    n_projects = sum(1 for p in projects_above if not (args.skip_existing and project_slug(p) in existing))
     print(f"\nCompiled: {compiled} page(s) ({n_topics} topics, {n_people} people, {n_projects} projects)")
     if skipped_existing:
         print(f"Skipped:  {skipped_existing} already-compiled page(s) (--skip-existing)")
     if skipped_unchanged:
         print(f"Skipped:  {skipped_unchanged} unchanged page(s) (--skip-unchanged)")
+    if skipped_cadence:
+        print(f"Skipped:  {skipped_cadence} content-creator page(s) held by {cadence_days:.0f}-day cadence")
     if topics_below:
         print(f"Skipped:  {len(topics_below)} topic(s) below threshold of {min_topic} (use --dry-run to see list)")
     if errors:
@@ -874,6 +1111,11 @@ def main() -> None:
                         help="Skip pages that already exist in wiki_pages (resume interrupted run)")
     parser.add_argument("--skip-unchanged", action="store_true",
                         help="Skip pages whose thought_count hasn't changed since last compile (for cron)")
+    parser.add_argument("--cadence-days", type=float, default=None,
+                        help=f"Days between recompiles for content-creator person pages under "
+                             f"--skip-unchanged, even when thought_count changed (default: {CONTENT_CREATOR_CADENCE_DAYS})")
+    parser.add_argument("--git-publish", action="store_true",
+                        help="Commit+push compiled_wiki/ after a completed --all run, if anything changed (for cron)")
 
     args = parser.parse_args()
 
@@ -883,7 +1125,7 @@ def main() -> None:
         print(f"Missing env vars: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
 
-    people_aliases, topic_aliases, project_defs = load_aliases()
+    people_aliases, topic_aliases, project_defs, people_excluded = load_aliases()
     people_reverse = build_reverse_map(people_aliases)
     topic_reverse = build_reverse_map(topic_aliases)
 
@@ -891,7 +1133,7 @@ def main() -> None:
         cmd_list(env)
 
     elif args.all:
-        cmd_all(env, args, people_aliases, topic_aliases, project_defs)
+        cmd_all(env, args, people_aliases, topic_aliases, project_defs, people_excluded)
 
     elif args.topic:
         canonical = topic_aliases.get(args.topic, args.topic)
@@ -924,20 +1166,21 @@ def main() -> None:
             print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
     elif args.project:
-        if args.project not in project_defs:
-            print(f"Project '{args.project}' not found in project_definitions.json", file=sys.stderr)
-            print(f"Known projects: {', '.join(project_defs.keys())}", file=sys.stderr)
+        # --project takes a workspace slug (identity), not a display title.
+        known = get_qualifying_projects(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs, 1)
+        if args.project not in known:
+            print(f"No active thoughts with workspace '{args.project}'", file=sys.stderr)
+            print(f"Known workspaces: {', '.join(sorted(known))}", file=sys.stderr)
             sys.exit(1)
-        anchor_topics = project_defs[args.project]
         if args.skip_existing:
             existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
-            slug = slugify(args.project, "project")
+            slug = project_slug(args.project)
             if slug in existing:
                 print(f"Skipping {args.project} — already compiled (--skip-existing)")
                 return
         if not args.dry_run:
             print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        compile_single_project(env, args.project, anchor_topics, dry_run=args.dry_run)
+        compile_single_project(env, args.project, project_title(args.project, project_defs), dry_run=args.dry_run)
         if not args.dry_run:
             print(f"Finished: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
