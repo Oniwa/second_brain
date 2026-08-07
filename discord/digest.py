@@ -15,6 +15,7 @@ import base64
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from email.mime.multipart import MIMEMultipart
@@ -107,6 +108,76 @@ DISCORD_HEADERS = {
     "Content-Type": "application/json",
 }
 
+DISCORD_CHUNK_LIMIT = 1900
+DISCORD_INTER_CHUNK_DELAY = 0.75
+DISCORD_MAX_RETRIES = 3
+
+
+def split_discord_message(message: str, limit: int = DISCORD_CHUNK_LIMIT) -> list:
+    """Split message into <=limit-char chunks, preferring paragraph/line/word
+    boundaries over hard cuts. "".join(result) == message always holds."""
+    chunks = []
+    remaining = message
+    while len(remaining) > limit:
+        window_end = limit
+        split_at = remaining.rfind("\n\n", 0, window_end)
+        if split_at != -1:
+            split_at += 2
+        else:
+            split_at = remaining.rfind("\n", 0, window_end)
+            if split_at != -1:
+                split_at += 1
+            else:
+                split_at = remaining.rfind(" ", 0, window_end)
+                if split_at != -1:
+                    split_at += 1
+                else:
+                    split_at = limit
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:]
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def _discord_retry_after(error: urllib.error.HTTPError) -> float:
+    try:
+        body = json.loads(error.read().decode("utf-8"))
+        if "retry_after" in body:
+            return float(body["retry_after"])
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, AttributeError):
+        pass
+    header_val = error.headers.get("Retry-After") if error.headers else None
+    if header_val:
+        try:
+            return float(header_val)
+        except ValueError:
+            pass
+    return 1.0
+
+
+def _post_discord_chunk(msg_url: str, headers: dict, chunk: str, index: int, total: int) -> None:
+    attempts = 0
+    while True:
+        req = urllib.request.Request(
+            msg_url,
+            data=json.dumps({"content": chunk}).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req):
+                return
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempts < DISCORD_MAX_RETRIES:
+                attempts += 1
+                time.sleep(_discord_retry_after(e))
+                continue
+            raise RuntimeError(
+                f"Discord DM failed on chunk {index + 1} of {total} "
+                f"(delivered {index} of {total} before this failure): {e}"
+            ) from e
+
 
 def send_discord_dm(bot_token: str, user_id: str, message: str) -> None:
     headers = {**DISCORD_HEADERS, "Authorization": f"Bot {bot_token}"}
@@ -122,18 +193,13 @@ def send_discord_dm(bot_token: str, user_id: str, message: str) -> None:
         channel = json.loads(resp.read().decode("utf-8"))
     channel_id = channel["id"]
 
-    # Step 2: Send message (split if over 1900 chars)
+    # Step 2: Send message (boundary-split, paced, retried on 429)
     msg_url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
-    chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
-    for chunk in chunks:
-        msg_req = urllib.request.Request(
-            msg_url,
-            data=json.dumps({"content": chunk}).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        with urllib.request.urlopen(msg_req):
-            pass
+    chunks = split_discord_message(message)
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(DISCORD_INTER_CHUNK_DELAY)
+        _post_discord_chunk(msg_url, headers, chunk, index=i, total=len(chunks))
 
 
 def send_gmail(service, recipient: str, subject: str, body: str) -> None:
