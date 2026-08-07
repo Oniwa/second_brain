@@ -13,6 +13,7 @@ Usage:
   python scripts/compile_wiki.py --strict
   python scripts/compile_wiki.py --skip-existing
   python scripts/compile_wiki.py --skip-unchanged
+  python scripts/compile_wiki.py --skip-unchanged --cadence-days 90
   python scripts/compile_wiki.py --skip-topics
   python scripts/compile_wiki.py --skip-people
   python scripts/compile_wiki.py --skip-projects
@@ -35,6 +36,14 @@ DEFAULT_TOPIC_THRESHOLD = 5
 DEFAULT_PERSON_THRESHOLD = 2
 DEFAULT_PROJECT_THRESHOLD = 2
 OUTPUT_DIR = Path(__file__).parent.parent / "compiled_wiki"
+
+# A person page is "content creator" if most of their mentions are external content
+# (source I read) rather than interactions (person I work with) — see
+# plans/in_progress/wiki_compile_cost_control.md. These pages recompile on a slower
+# cadence under --skip-unchanged since their high-value content (cross-topic framework
+# synthesis) changes far slower than their thought count does.
+CONTENT_CREATOR_EXTERNAL_THRESHOLD = 0.5
+CONTENT_CREATOR_CADENCE_DAYS = 90
 
 # Mirrors EXTERNAL_SOURCE_PATTERN in mcp/src/server.ts — external content is deliberately
 # never stamped with a workspace (a /pan run must not inherit whatever repo it ran from),
@@ -238,12 +247,32 @@ def load_env() -> dict:
     return env
 
 
-def load_aliases() -> tuple[dict, dict, dict]:
+def load_aliases() -> tuple[dict, dict, dict, set]:
     scripts_dir = Path(__file__).parent
-    people = json.loads((scripts_dir / "people_aliases.json").read_text("utf-8")) if (scripts_dir / "people_aliases.json").exists() else {}
+    people_raw = json.loads((scripts_dir / "people_aliases.json").read_text("utf-8")) if (scripts_dir / "people_aliases.json").exists() else {}
     topics = json.loads((scripts_dir / "topic_aliases.json").read_text("utf-8")) if (scripts_dir / "topic_aliases.json").exists() else {}
     projects = json.loads((scripts_dir / "project_definitions.json").read_text("utf-8")) if (scripts_dir / "project_definitions.json").exists() else {}
-    return people, topics, normalize_project_overrides(projects)
+    people, people_excluded = normalize_people_aliases(people_raw)
+    return people, topics, normalize_project_overrides(projects), people_excluded
+
+
+def normalize_people_aliases(raw: dict) -> tuple[dict, set]:
+    """Split people_aliases.json into the variant->canonical string map (unchanged
+    meaning) and the set of canonical names flagged exclude:true (new).
+
+    A string value keeps today's shape: `"variant": "canonical name"`. An object value
+    means the key IS the canonical/entity name being configured, not a variant, e.g.
+    `"Matt Wolfe": {"exclude": true}` excludes that page from --all regardless of
+    thought_count/threshold. Mirrors normalize_project_overrides's string|object shape.
+    """
+    aliases: dict = {}
+    excluded: set = set()
+    for key, value in (raw or {}).items():
+        if isinstance(value, str):
+            aliases[key] = value
+        elif dict(value).get("exclude"):
+            excluded.add(key)
+    return aliases, excluded
 
 
 def normalize_project_overrides(raw: dict) -> dict:
@@ -607,18 +636,36 @@ def get_distinct_topics(supabase_url: str, key: str, topic_aliases: dict) -> dic
 
 
 def get_distinct_people(supabase_url: str, key: str, people_aliases: dict) -> dict:
+    """Returns {canonical_person: {"count": N, "external": M}}. `external` counts
+    mentions from is_external thoughts or an EXTERNAL_SOURCE_RE-matching source —
+    used to classify content-creator pages for cadence control (see
+    CONTENT_CREATOR_EXTERNAL_THRESHOLD)."""
     thoughts = supabase_get(supabase_url, key, "/rest/v1/thoughts", {
         "status": "eq.active",
-        "select": "people",
+        "select": "people,is_external,source",
         "order": "id.asc",
         "limit": "1000",
     })
-    counts: dict = {}
+    stats: dict = {}
     for t in thoughts:
+        is_ext = bool(t.get("is_external")) or bool(EXTERNAL_SOURCE_RE.match(t.get("source") or ""))
         for person in t.get("people") or []:
             canonical = people_aliases.get(person, person)
-            counts[canonical] = counts.get(canonical, 0) + 1
-    return counts
+            entry = stats.setdefault(canonical, {"count": 0, "external": 0})
+            entry["count"] += 1
+            if is_ext:
+                entry["external"] += 1
+    return stats
+
+
+def is_content_creator(stats: dict) -> bool:
+    count = stats["count"]
+    return count > 0 and (stats["external"] / count) >= CONTENT_CREATOR_EXTERNAL_THRESHOLD
+
+
+def days_since(iso_ts: str) -> float:
+    dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+    return (datetime.now(timezone.utc) - dt).total_seconds() / 86400
 
 
 def get_qualifying_projects(supabase_url: str, key: str, project_defs: dict, threshold: int) -> dict:
@@ -791,13 +838,32 @@ def cmd_list(env: dict) -> None:
     print(f"\nTotal: {len(pages)} page(s)")
 
 
-def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_aliases: dict, project_defs: dict) -> None:
+def person_skip_reason(existing_page: dict, count: int, stats: dict, cadence_days: float, skip_unchanged: bool) -> str:
+    """Returns a skip reason if --skip-unchanged would skip this person page in cmd_all,
+    or "" if it should compile. Content-creator pages additionally hold at their current
+    content even after a thought_count change until cadence_days have passed since
+    last_compiled_at — see CONTENT_CREATOR_EXTERNAL_THRESHOLD. Shared by the --dry-run
+    report and the live --all loop so the two never drift apart."""
+    if not skip_unchanged or not existing_page:
+        return ""
+    if existing_page["thought_count"] == count:
+        return "unchanged"
+    if is_content_creator(stats) and existing_page.get("last_compiled_at"):
+        elapsed = days_since(existing_page["last_compiled_at"])
+        if elapsed < cadence_days:
+            return f"cadence: {elapsed:.0f}d/{cadence_days:.0f}d since last compile"
+    return ""
+
+
+def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_aliases: dict,
+            project_defs: dict, people_excluded: set) -> None:
     run_start = datetime.now(timezone.utc)
     run_ts = run_start.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     min_topic = args.min_thoughts if args.min_thoughts is not None else DEFAULT_TOPIC_THRESHOLD
     min_person = args.min_thoughts if args.min_thoughts is not None else DEFAULT_PERSON_THRESHOLD
     min_project = DEFAULT_PROJECT_THRESHOLD
+    cadence_days = args.cadence_days if args.cadence_days is not None else CONTENT_CREATOR_CADENCE_DAYS
     people_reverse = build_reverse_map(people_aliases)
     topic_reverse = build_reverse_map(topic_aliases)
     existing = get_existing_pages(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"])
@@ -805,6 +871,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     topics_above: dict = {}
     topics_below: dict = {}
     people_above: dict = {}
+    people_stats: dict = {}
     projects_above: dict = {}
 
     if not args.skip_topics:
@@ -816,10 +883,10 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
                 topics_below[topic] = count
 
     if not args.skip_people:
-        all_people = get_distinct_people(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], people_aliases)
-        for person, count in all_people.items():
-            if count >= min_person:
-                people_above[person] = count
+        people_stats = get_distinct_people(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], people_aliases)
+        for person, stats in people_stats.items():
+            if stats["count"] >= min_person and person not in people_excluded:
+                people_above[person] = stats["count"]
 
     if not args.skip_projects:
         projects_above = get_qualifying_projects(env["SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], project_defs, min_project)
@@ -837,7 +904,9 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
             print(f"  {topic:<48} {count:>3} thoughts{stale_marker(slug, count)}")
         for person, count in sorted(people_above.items(), key=lambda x: -x[1]):
             slug = slugify(person, "person")
-            print(f"  {person:<48} {count:>3} thoughts{stale_marker(slug, count)}")
+            reason = person_skip_reason(existing.get(slug), count, people_stats[person], cadence_days, args.skip_unchanged)
+            skip_note = f"  [SKIP: {reason}]" if reason else ""
+            print(f"  {person:<48} {count:>3} thoughts{stale_marker(slug, count)}{skip_note}")
         for workspace, count in sorted(projects_above.items(), key=lambda x: -x[1]):
             slug = project_slug(workspace)
             label = f"{project_title(workspace, project_defs)} ({workspace})"
@@ -868,6 +937,7 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
     errors = 0
     skipped_existing = 0
     skipped_unchanged = 0
+    skipped_cadence = 0
     error_details: list[str] = []
 
     discord_token = env.get("DISCORD_BOT_TOKEN")
@@ -913,8 +983,12 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         if args.skip_existing and slug in existing:
             skipped_existing += 1
             continue
-        if args.skip_unchanged and slug in existing and existing[slug]["thought_count"] == count:
+        skip_reason = person_skip_reason(existing.get(slug), count, people_stats[person], cadence_days, args.skip_unchanged)
+        if skip_reason == "unchanged":
             skipped_unchanged += 1
+            continue
+        if skip_reason:
+            skipped_cadence += 1
             continue
         try:
             variants = people_reverse.get(person, [person])
@@ -959,6 +1033,8 @@ def cmd_all(env: dict, args: argparse.Namespace, people_aliases: dict, topic_ali
         print(f"Skipped:  {skipped_existing} already-compiled page(s) (--skip-existing)")
     if skipped_unchanged:
         print(f"Skipped:  {skipped_unchanged} unchanged page(s) (--skip-unchanged)")
+    if skipped_cadence:
+        print(f"Skipped:  {skipped_cadence} content-creator page(s) held by {cadence_days:.0f}-day cadence")
     if topics_below:
         print(f"Skipped:  {len(topics_below)} topic(s) below threshold of {min_topic} (use --dry-run to see list)")
     if errors:
@@ -994,6 +1070,9 @@ def main() -> None:
                         help="Skip pages that already exist in wiki_pages (resume interrupted run)")
     parser.add_argument("--skip-unchanged", action="store_true",
                         help="Skip pages whose thought_count hasn't changed since last compile (for cron)")
+    parser.add_argument("--cadence-days", type=float, default=None,
+                        help=f"Days between recompiles for content-creator person pages under "
+                             f"--skip-unchanged, even when thought_count changed (default: {CONTENT_CREATOR_CADENCE_DAYS})")
 
     args = parser.parse_args()
 
@@ -1003,7 +1082,7 @@ def main() -> None:
         print(f"Missing env vars: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
 
-    people_aliases, topic_aliases, project_defs = load_aliases()
+    people_aliases, topic_aliases, project_defs, people_excluded = load_aliases()
     people_reverse = build_reverse_map(people_aliases)
     topic_reverse = build_reverse_map(topic_aliases)
 
@@ -1011,7 +1090,7 @@ def main() -> None:
         cmd_list(env)
 
     elif args.all:
-        cmd_all(env, args, people_aliases, topic_aliases, project_defs)
+        cmd_all(env, args, people_aliases, topic_aliases, project_defs, people_excluded)
 
     elif args.topic:
         canonical = topic_aliases.get(args.topic, args.topic)

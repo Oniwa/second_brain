@@ -66,8 +66,26 @@ Deleting the page orphans **32 thoughts, not 905**. An earlier draft of this pla
 - **Roadmap #6 (AI token / cost tracker)** — this analysis had to be reconstructed from character counts because no per-call cost data exists. This is the motivating example for Phase 1 instrumentation.
 - **Roadmap #1 (weekly cron)** — the ~$1.40/week recurring charge only starts once the cron is live. Worth deciding before Step 5 activates it, not after.
 
-## Open questions
+## Resolution — grilled 2026-08-06
 
-- Exclude the thin content-creator long tail, or keep all person pages and control cost purely via cadence/caps?
-- Should content-creator pages be a distinct entity type with their own prompt ("what I've learned from this source") rather than the third-party-biography framing person pages use today?
-- Threshold shape for option 2: absolute delta, percentage, or "N weeks since last compile, whichever first"?
+**Mechanism: cadence (option 2) + exclude flag (option 1), both.** Cadence does the real work; exclude is a zero-cost escape hatch for a page nobody wants even quarterly. Options 3 (per-page thought cap) and 4 (prompt caching) rejected — not needed once cadence caps the recurring cost.
+
+**Scope: all 33 content-creator pages, not just Nate.** Classified live at compile time — no hand-maintained list: `external_mentions / total_mentions >= 0.5` (`is_external` OR `EXTERNAL_SOURCE_PATTERN` match on `source`, same methodology as the measurement above). `0.5` is a named constant in `compile_wiki.py`, next to `DEFAULT_PERSON_THRESHOLD`. Applies automatically to future content creators too.
+
+**Colleague pages: trusted, not re-verified.** 102 mentions / 23 people is self-evidently below the cost of one Nate compile.
+
+**Prompt: unchanged.** This is a cost-cadence fix, not a content-quality change — no trimming of "Key Interactions & History" or the footnote list.
+
+**Cadence rule (content-creator pages only, inside `--all --skip-unchanged`):** skip recompiling unless **both** (a) ≥90 days (default; `--cadence-days`-overridable) since `last_compiled_at`, **and** (b) `thought_count` has changed since the last compile. Either false → skip. A page with no prior `last_compiled_at` (never compiled) is never cadence-gated — first compile always proceeds.
+
+**Manual compiles always bypass cadence.** `--person "X"` and `--all` without `--skip-unchanged` are unaffected — matches existing code (the `--person` branch never consults `skip_unchanged` today), so no new bypass logic is needed.
+
+**`people_aliases.json` gains `string | object` values**, mirroring `project_definitions.json`'s normalization. A plain string value keeps today's meaning (`{variant: canonical}`). An object value means the **key itself** is the canonical/entity name being configured: `{"Matt Wolfe": {"exclude": true}}`. A new `normalize_people_aliases()` splits the raw file into the existing variant→canonical map plus an exclude set at load time. Excluded people are dropped from `people_above` right after `get_distinct_people`, before compilation.
+
+**Rollout: no reset.** The quarterly clock starts from each page's existing `last_compiled_at`. Most content-creator pages were last compiled 2026-07-26, so they become cadence-eligible again ~2026-10-24.
+
+**Ship gate: code must merge before `wiki_weekly_cron.md` Step 5 activates the cron** — deciding alone doesn't unblock it, since the first live weekly run would immediately reproduce the $1.40/week problem this plan exists to prevent.
+
+**Testing:** no automated test infra exists for `compile_wiki.py` (consistent with prior changes to this file, e.g. the pagination fix) — verified via `--dry-run` output, which reports content-creator cadence-skips distinctly from ordinary unchanged-skips (last compiled Nd ago, next eligible date).
+
+**Explicitly out of scope:** per-person cadence overrides (single global `--cadence-days` covers all content-creator pages); roadmap #5's underlying 117-value people dedup (this pass only extends the file format, doesn't touch canonicalization).
