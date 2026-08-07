@@ -2,6 +2,8 @@
 
 Opened 2026-08-07, during the wiki cron's first live activation. **Design not finalized — this is a stub with a strong leaning, not a spec. Needs its own grill-me pass and a small proof-of-concept before implementing.**
 
+> ⏸️ **Demoted to fallback, same day.** `plans/in_progress/wiki_incremental_compile.md` is now the leading candidate — quantified savings comparable or better (~85-90% per-event token reduction, modeled ~$3-5/month vs. this route's "free but unverified fit"), no new platform/auth/Windows-parity unknowns, builds on infrastructure already shipped and verified working. **Try incremental compile first.** Return to this route only if incremental compile's quality-drift risk turns out unmanageable in practice.
+
 ---
 
 ## Problem this solves
