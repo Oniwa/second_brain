@@ -38,3 +38,6 @@ inspector_port = 8083
 
 [functions.process-thought]
 verify_jwt = false
+
+[functions.generate-digest]
+verify_jwt = false
