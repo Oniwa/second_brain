@@ -1,6 +1,24 @@
 # Recall-Before-Work Skill — Stub
 
-**Status:** stub — idea captured 2026-07-03, **needs a real planning session before implementation**. This file is a sketch to hold the idea, not a build spec.
+**Status:** shipped 2026-08-25 as `/pick-up` (`.github/skills/pick-up/SKILL.md`). Resolved via a clarifying Q&A session in lieu of a separate planning pass — see "Resolution" below.
+
+---
+
+## Resolution (2026-08-25)
+
+Implemented as `/pick-up`, a manual Copilot CLI skill (`.github/skills/pick-up/SKILL.md`, Agent Skills spec format). Answers to the open questions below:
+
+- **Trigger:** manual slash command, not an automatic hook — keeps blast radius small, consistent with `/recap`.
+- **Topic inference:** sidestepped rather than resolved — no inference logic at all. Scope is fixed to `CURRENT.md` + `list_recent(category: project)` + `list_recent(category: insight)` on the current workspace (no `workspace: "all"`), avoiding the cross-project noise documented below (matches this file's own evidence test, which combined `project`+`insight`). No `semantic_search`/`meeting_prep` — deliberately out of scope, too heavy for a routine session-start pull. Caught in review: `list_recent`'s `category` filter is single-valued, so the `insight` call is separate from `project` — initially shipped with only `project`, which would have silently dropped "Learned" captures (they auto-classify as `insight`, not `project`); fixed same day.
+- **Window:** no fixed default; expands (3 → 7 → 30 → ... days) until the last session's entries are found, then stops.
+- **Output:** one blended narrative brief (not separate CURRENT.md/brain sections) — what happened last, where to start next.
+- **Drift check:** included, read-only — flags CURRENT.md vs brain mismatches without editing, same quiet-by-default rule as `/recap`'s Step 4. Decided this belongs in `pick-up` (not just `recap`) since staleness matters most right before you act on it, not just right after a session ends.
+- **Digest/push overlap:** confirmed non-issue, not just deferred — digest/push has no access to `CURRENT.md` and isn't guaranteed to land on the day a given project gets picked up. Still distinct from the proactive-resurfacing push stub in `open_brain_improvements.md`.
+- **Topic inference:** confirmed as an intentional "start simple" decision, not a placeholder — keep the fixed CURRENT.md + list_recent scope as-is, and only add inference/argument support later if the fixed scope proves insufficient in practice.
+
+---
+
+**Original status:** stub — idea captured 2026-07-03, **needs a real planning session before implementation**. This file is a sketch to hold the idea, not a build spec.
 
 ---
 
