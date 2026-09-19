@@ -1,26 +1,36 @@
 # Learning system — a `/learn` skill for closing applied AI/agentic-systems gaps
 
 _Filed 2026-09-18._ Driven by `applied_ai_agentic_systems_knowledge_assessment.md` (copied into this
-directory) — a third-party knowledge assessment scoring the user 19.5/30 on applied generative AI and
-agentic systems, and naming a specific, ranked topic backlog to close. The assessment is the actual
+directory) — a third-party knowledge assessment scoring the user 19.5/30 on applied generative
+Artificial Intelligence (AI) and agentic systems, and naming a specific, ranked topic backlog to close.
+The assessment is the actual
 learning target; this plan is the design for the skill that will be used to work through it.
+
+**Origin note:** the specific spark for wanting a system built around this, rather than just using
+Claude ad hoc, was one concrete takeaway from panning Austin Marchese's self-education video: his
+three-step "learning ladder" (ELI5/12/18 → why this matters to me → ground it in what I'm working on —
+second-brain thought `159e464a`). That ladder is now the explanation step of Mode 2 (see the build
+sequence below) — it's not just background inspiration, it's load-bearing in the design.
 
 ## Why a custom skill, not an off-the-shelf one
 
 Two existing methodologies were evaluated in depth (full comparison in session history, not reproduced
 here):
 
-- **Austin Marchese's six-question self-education framework** — a single-pass, ROI-gated triage: why
+- **Austin Marchese's six-question self-education framework** — a single-pass, Return on Investment
+  (ROI)-gated triage: why
   learn it, what depth is needed, who's solved it (alpha farming), make it concrete (smallest V1 +
   teach-back), apply it to your actual situation, keep learning (recursive). Optimized for *acquiring*
   useful knowledge fast, one constraint at a time.
-- **Matt Pocock's `/teach` skill** — a stateful, multi-session tutoring loop (mission file, ZPD-scoped
+- **Matt Pocock's `/teach` skill** — a stateful, multi-session tutoring loop (mission file, Zone of
+  Proximal Development (ZPD)-scoped
   lessons, spaced-repetition warm-ups, persistent learning records). Optimized for *retaining* a domain
   over months.
 
 Neither fits as-is. The user's second-brain history shows a builder/architect/evaluator pattern (learn →
 build → evaluate → deepen only if ROI holds), not a "spend six months mastering one domain" pattern —
-closer to Marchese. But the assessment gaps (RAG, AI evaluation, observability, failure analysis) are
+closer to Marchese. But the assessment gaps (Retrieval-Augmented Generation (RAG), AI evaluation,
+observability, failure analysis) are
 exactly the kind of technical depth that decays without reinforcement — where Pocock's retention
 mechanisms earn their keep. The user's actual job (Software Verification Engineer) also demands a
 mandatory failure-analysis/verification gate that neither framework has natively.
@@ -70,10 +80,20 @@ Collapsed to 5 visible moves (not 10 — see fixes below):
    per Marchese's "alpha farming" principle of seeking real practitioners over generic influencers). The
    second brain is a fast, personalized starting point, not the ceiling — it only contains what's already
    been captured, which is a strict subset of what's authoritative on a given topic, and relying on it
-   alone would recursively limit every mission to previously-consumed content. Open with a one- or
-   two-sentence ELI5 analogy for the core concept before the target-depth explanation — a cheap intuitive
-   hook that costs nothing structurally and makes the depth that follows easier to hang onto. Then explain
-   at target depth.
+   alone would recursively limit every mission to previously-consumed content.
+
+   Explanation itself follows Marchese's **three-step learning ladder** (the actual capture that
+   motivated building this system in the first place — second-brain thought `159e464a`, from the same
+   video): (a) **"Explain it like I'm 5/12/18"** — force simplification; a domain analogy the user
+   already knows well (sports, cooking, whatever fits) is an explicit variant of this step, not a
+   separate add-on; (b) **level-two analysis — why this matters to the user specifically**, not just
+   the abstract concept, tied back to the mission from Step 1; (c) **ground it in what the user is
+   already working on** — if that context is missing or ambiguous, interview for it rather than
+   guessing. All three steps run in sequence before the applied exercise; this replaces an earlier,
+   thinner "just add one ELI5 sentence" version of this step.
+3. Applied exercise (smallest useful implementation or decision exercise)
+4. Teach-back + completion gate (see remediation path below)
+5. Concise learning record + recommended next step (continue / apply / pause / graduate)
 3. Applied exercise (smallest useful implementation or decision exercise)
 4. Teach-back + completion gate (see remediation path below)
 5. Concise learning record + recommended next step (continue / apply / pause / graduate)
@@ -114,7 +134,8 @@ Two real contradictions, plus simplifications — all reduce scope, none add it:
 5. **Pilot success criteria must be falsifiable, not a 10-item subjective checklist.** See below.
 6. **Define state-file location and resume protocol now**, not as an afterthought — cheap to specify
    up front, expensive to retrofit once records exist. **Resolved:** see "Artifact storage" section below
-   — a sibling `learning_lab` project, not inside this repo.
+   — a sibling `learning_lab` project, identified by its repo (not a hardcoded path), so it stays
+   reachable from any device that can clone/pull it, not just the one where it was first created.
 7. **No failure branch specified for stale/conflicting/absent sources** in step 2 — the skill should
    state the disagreement, downgrade the outcome to "needs experiment," and proceed rather than stalling.
 
@@ -138,7 +159,8 @@ implementation."
 
 1. **Retrieval-Augmented Generation & retrieval architecture** — largest gap (0.5/3 on RAG failure
    analysis). Embeddings, chunking, hybrid search, reranking, retrieval vs. answer evaluation, GraphRAG.
-2. **Hybrid local/cloud LLM architectures** — aligns with existing Python/Docker/privacy interests.
+2. **Hybrid local/cloud Large Language Model (LLM) architectures** — aligns with existing
+   Python/Docker/privacy interests.
    Local inference (Ollama/LM Studio/vLLM), quantization tradeoffs, privacy-aware routing, cloud
    fallback.
 3. **AI evaluation & quality engineering** — builds directly on existing verification-engineer
@@ -179,7 +201,8 @@ Frontmatter requirements per spec: `name` (lowercase, hyphens, matches directory
 verified learning cycle on a professionally relevant technical topic, producing a working exercise and a
 concise learning record. Use when the user wants to learn/study/get up to speed on an AI, agentic-systems,
 or technical topic they intend to apply."), optionally `compatibility` if the skill assumes second-brain
-MCP tools are available. Keep `SKILL.md` itself lean (per agentskills.io best practices — comparable to
+Model Context Protocol (MCP) tools are available. Keep `SKILL.md` itself lean (per agentskills.io best
+practices — comparable to
 this repo's own "under 200 lines, defer depth to reference files" belief already captured in the second
 brain) — v0.1's 5-step Mode 2 flow should fit directly in `SKILL.md`; Mode 1/Mode 3 additions in v0.3/v1.0
 belong in `references/` until promoted.
@@ -192,9 +215,19 @@ backlog item generalizes the sync.
 ## Artifact storage — a separate project directory, not inside `second_brain`
 
 **Decision: learning artifacts (mission files, sourced material, exercises, learning records, review
-ledgers) live in a new sibling project, not inside this repo.** Proposed location:
-`C:\projects\learning_lab\` (sibling to `second_brain` and `youtube_transcript`) — confirm the exact
-name/path before v0.1, but the shape below is settled.
+ledgers) live in a new sibling project, not inside this repo — identified as its own git repo, not a
+fixed local path.** This distinction matters beyond tidiness: a bare local folder only exists on one
+machine, but a git repo is clonable/pullable/pushable from anywhere with git and auth — including a
+mobile Claude Code session that has no access to an arbitrary desktop filesystem path. The skill should
+resolve `learning_lab` by **repo identity (its GitHub URL)**, not a hardcoded absolute path — clone it to
+whatever local cache location makes sense for the current environment if it isn't already present, work
+in it, then commit and push at natural checkpoints (record write, graduation). This sidesteps a known,
+already-flagged mistake: `/transcript`'s own doc admits its output path is "hardcoded for the home
+Windows PC" and needs multi-machine support — no reason to repeat that here when we can see it coming.
+Repo name/path/URL still need to be confirmed before v0.1 (see Open decisions), but the identity model
+(repo, not path) is settled. **Scope note:** actually building/testing the mobile flow is explicitly out
+of scope for the v0.1 pilot, which stays desktop-only — this only affects how the storage model is
+*specified*, so it doesn't need to be rebuilt later.
 
 **Why not inside `second_brain`:**
 - **Different artifact shape, different lifecycle.** Second brain's core data model is one atomic,
@@ -217,9 +250,11 @@ name/path before v0.1, but the shape below is settled.
   files in a sibling project directory — the `/transcript` skill (hosted here, in
   `.claude/commands/transcript.md`) already writes its output to `C:\projects\youtube_transcript\`, a
   separate project. The learning skill (hosted in `second_brain/.github/skills/learn/`) writing to
-  `learning_lab/` is the same pattern, not a new one.
+  `learning_lab/` is the same pattern, not a new one — but resolved by repo identity rather than a
+  hardcoded path, per the mobile-access reasoning above.
 
-**Proposed structure (per topic, git-tracked in its own repo):**
+**Proposed structure (per topic, git-tracked in its own repo, cloned by identity rather than assumed
+present at a fixed path):**
 
 ```
 learning_lab/
@@ -234,11 +269,12 @@ learning_lab/
     └── REVIEW.md                  # spaced-repetition ledger — Mode 3 / mastery-track topics only
 ```
 
-This also resolves the "state-file location" item from the Opus 5 review fixes above: the path is
-`learning_lab/<topic-slug>/`, the resume rule is "read `MISSION.md` + `RECORD.md` for this topic-slug at
-the start of any session that references it," and cross-session continuity doesn't depend on
+This also resolves the "state-file location" item from the Opus 5 review fixes above: the identity is
+`learning_lab` (a git repo, wherever it's cloned locally), the path within it is `<topic-slug>/`, the
+resume rule is "read `MISSION.md` + `RECORD.md` for this topic-slug at the start of any session that
+references it, cloning/pulling the repo first if needed," and cross-session continuity doesn't depend on
 `second_brain`'s workspace-per-cwd model at all — which is the right call, since a learning mission
-(e.g. "RAG") isn't tied to whatever project repo you happen to be sitting in that day.
+(e.g. "RAG") isn't tied to whatever project repo, or even device, you happen to be sitting at that day.
 
 ## Sourcing requirement — never second-brain-only
 
@@ -251,7 +287,8 @@ research, and must never be treated as the sole source of truth for a learning m
   you've already encountered; live research surfaces what's actually authoritative right now, including
   material you've never captured.
 - **Alpha farming (source curation) is explicitly about identifying real external practitioners**
-  (researchers, enterprise architects, maintainers of the relevant OSS project) — not generic content
+  (researchers, enterprise architects, maintainers of the relevant Open-Source Software (OSS) project)
+  — not generic content
   and not a stand-in for searching your own notes. The second brain isn't a proxy for "who has actually
   solved this."
 - **`SOURCES.md` per topic should visibly separate the two:** which sources came from prior second-brain
@@ -267,10 +304,12 @@ surface in `get_context`/`semantic_search`/wiki compiles alongside everything el
 
 ## Open decisions (resolve before or during v0.1 build)
 
-- **Confirm the `learning_lab` project name/path and repo timing** — first action when work on this
-  actually starts. Not resolved yet; proposed `C:\projects\learning_lab\` as a starting point, sibling
-  to `second_brain`/`youtube_transcript`, likely its own git repo from session one since exercises are
-  real code — but confirm before creating anything.
+- **Confirm the `learning_lab` project name, GitHub repo URL, and creation timing** — first action when
+  work on this actually starts. Not resolved yet; proposed name `learning_lab` as a starting point, its
+  own git repo from session one (settled — see "Artifact storage," driven by the mobile-access
+  requirement, not just exercises being real code) — but confirm the actual repo URL/org before creating
+  anything, and whether the initial local clone lives at `C:\projects\learning_lab\` on this machine or
+  wherever else it's cloned first.
 
 ## Next step
 
