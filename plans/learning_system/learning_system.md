@@ -60,6 +60,27 @@ Learning request
     +-- Mode 3: Stateful mastery track (strategic gap, sustained reuse, retention matters)
 ```
 
+### Competency levels — what each target actually means
+
+Named repeatedly above but not previously defined anywhere in this doc. Observable distinctions, not
+vibes:
+
+- **Awareness** — can explain the concept and recognize when it applies, in conversation. Cannot build
+  or troubleshoot anything with it. No implementation expected. This is Mode 1's ceiling.
+- **Practitioner** — can implement a bounded solution *with guidance* (this skill, docs, examples).
+  Can't yet troubleshoot novel failures alone or defend a design choice against alternatives. Default
+  target for Mode 2 when nothing else is specified.
+- **Independent practitioner** — can implement *and* troubleshoot without step-by-step assistance;
+  knows the common failure modes going in, not just after hitting them. The bar most Mode 2 missions
+  should realistically aim for if they run long enough to include real failure analysis.
+- **Architect** — can select between competing designs and defend the tradeoffs (cost, latency,
+  complexity, risk) for a specific situation, not just describe how each option works. Requires having
+  seen or built more than one approach — usually needs Mode 3's sustained exposure, not a single Mode 2
+  cycle.
+
+A mission can state a *target* competency higher than what one session will reach — the learning record
+in that case should say so explicitly rather than silently overstating what was demonstrated.
+
 Cross-cutting non-negotiables for Modes 2 and 3 (professionally actionable topics only):
 mission relevance, smallest practical application, teach-back, failure analysis, verification evidence.
 
@@ -92,10 +113,9 @@ Collapsed to 5 visible moves (not 10 — see fixes below):
    guessing. All three steps run in sequence before the applied exercise; this replaces an earlier,
    thinner "just add one ELI5 sentence" version of this step.
 3. Applied exercise (smallest useful implementation or decision exercise)
-4. Teach-back + completion gate (see remediation path below)
-5. Concise learning record + recommended next step (continue / apply / pause / graduate)
-3. Applied exercise (smallest useful implementation or decision exercise)
-4. Teach-back + completion gate (see remediation path below)
+4. Teach-back + completion gate (see remediation path below; operationalizes the same idea as the
+   "mic test" technique captured from the same Marchese video — thought `b8ec8883` — explain aloud,
+   surface gaps from what you can't yet say)
 5. Concise learning record + recommended next step (continue / apply / pause / graduate)
 
 **v0.2 — after several real uses.** Improve friction points found in practice; add the evidence
@@ -148,6 +168,26 @@ Priorities").
 **Mission (narrowed to be falsifiable, not an open-ended study):** "Determine whether adding a reranker
 improves retrieval quality enough to justify its latency, cost, and complexity for a small RAG
 implementation."
+
+**Worked example — competency contract and rubric.** Referenced above and by Opus 5 review fix #3, but
+never previously illustrated. For this pilot mission, target competency = **independent practitioner**
+(per the levels just defined: can implement and troubleshoot a reranking decision without step-by-step
+help, going in aware of the common failure modes).
+
+*Competency contract* (`MISSION.md`'s graduation criteria — "I can..." statements, observable, not vague):
+1. Explain what a reranker adds on top of a base retriever, in one paragraph, unprompted.
+2. Implement a reranking step in a small retrieval pipeline.
+3. Design a retrieval-quality comparison (with vs. without reranker) using a repeatable small dataset.
+4. State the latency/cost/complexity cost of adding it.
+5. Give a specific yes/no recommendation for the stated use case, with the evidence that supports it.
+6. Name at least two ways a reranker itself can fail or mislead (e.g., overfit to the eval set, hides a
+   bad base-retrieval result instead of fixing it).
+
+*Rubric* (written before teaching, restated verbatim at grading time, per fix #3): the teach-back passes
+only if the user's own words — not the model's — cover (a) what reranking does differently from initial
+retrieval, (b) why it costs something (latency/compute/complexity), and (c) at least one concrete
+scenario where skipping it would still be the right call. Partial/vague answers on any one of the three
+trigger the remediation path (name the gap, re-teach once, retry once, then log as a Remaining Gap).
 
 **Pilot success criteria (3, not 10):**
 1. Did the session end with a defensible yes/no on the reranker?
@@ -317,3 +357,86 @@ Build v0.1 (Mode 2 only, 5-step version, with the review fixes applied) as a sta
 it on the RAG reranking mission above. Do not build the router, Mode 1, Mode 3, or the evidence-
 classification schema until v0.1 has been used on a real topic and the pilot success criteria have been
 checked.
+
+## Glossary — concepts referenced above by keyword only
+
+Terms used throughout this doc as shorthand, expanded here so the plan reads cold without needing the
+design conversation that produced it.
+
+**ELI5 / the learning ladder.** Marchese's three-step sequence for explaining any new concept: (1)
+"explain it like I'm 5/12/18" — force simplification, with a domain analogy the user already knows
+(sports, cooking, whatever fits) as an explicit variant of this step, not a separate technique; (2)
+"level-two analysis" — why this specific concept matters to *this* user, tied back to their stated
+mission, not an abstract textbook answer; (3) ground it in what the user is already working on,
+interviewing for missing context rather than guessing at it. It's the explanation half of Step 2 in this
+plan's v0.1 flow, and it's the specific capture (second-brain thought `159e464a`) that motivated building
+this system in the first place, rather than just using Claude ad hoc for one-off explanations.
+
+**Alpha farming.** Marchese's term for deliberately seeking out people who are actually doing the thing —
+researchers, practicing engineers, maintainers of the relevant tool or library — instead of whichever
+content ranks highest or was produced by someone who learned the topic two weeks before making a video
+about it. In this plan it shows up as a requirement on Step 2's source-gathering: grounding must include
+live external research aimed at real practitioners, not just whatever the second brain already has saved
+or whatever a generic search surfaces first.
+
+**Teach-back.** The core verification move: after being taught something, the user explains it back in
+their own words, unprompted, before the model offers any commentary. It's what actually distinguishes
+"can recognize the right words" from "understands the concept" — a user can nod along to a good
+explanation without being able to reproduce or apply it. In this plan it's Step 4's mandatory gate for
+Mode 2 and 3, with a defined remediation path (name the gap, re-teach once, retry once, then log as a
+Remaining Gap) rather than an infinite loop or a silent pass.
+
+**Mic test.** The specific Marchese technique that teach-back operationalizes (second-brain thought
+`b8ec8883`): explain a concept out loud to Claude, and let its follow-up questions reveal blind spots you
+didn't know you had. The distinction from teach-back as described above is subtle but real — mic test is
+about *discovering* gaps through open-ended follow-up questioning, while this plan's teach-back gate is
+about *verifying* specific, pre-written rubric criteria were met. Both rely on the same underlying
+mechanism: you don't know what you don't understand until you try to say it out loud.
+
+**Smallest V1.** Marchese's build principle: once a concept is explained, don't keep studying it in the
+abstract — build the smallest possible real thing that uses it, immediately. The build itself becomes
+the teacher, surfacing gaps that reading or discussion alone wouldn't. This is Step 3 of the v0.1 flow
+("applied exercise") and is also why `learning_lab`'s per-topic structure includes an `exercises/`
+directory for real, runnable code rather than notes about code.
+
+**Relevance gate.** The admission-time question Marchese's framework asks before any learning starts:
+why learn this at all? This plan classifies the answer into three buckets — professionally actionable
+(ties to a current or near-term responsibility), capability-building (closes an identified gap, no
+immediate deliverable), or intellectually curious (no planned application) — because the three warrant
+different depth and different persistence, not a uniform process. It's the first branch in the target
+three-mode architecture, though v0.1 doesn't build the full router yet.
+
+**Continuation / scope gate ("topic gravity").** A recurring check, distinct from the one-time relevance
+gate above: a mission that was legitimately worth starting can still drift — the recurring failure mode
+this plan calls "topic gravity," where a mission to understand RAG quietly grows into implementing
+GraphRAG or benchmarking five vector databases nobody asked for. The gate re-asks, at natural
+checkpoints: is this still tied to the original mission, or has scope crept past what the mission
+actually needs? It's deferred to Mode 3 in the current build sequence (v0.1's single-session Mode 2
+cycle is short enough that scope drift is less of a risk, but it becomes necessary once missions span
+multiple sessions).
+
+**Zone of Proximal Development (ZPD).** A concept from educational psychology (Vygotsky): the band of
+difficulty just above what a learner can already do alone, where they can succeed with guidance and are
+stretched without being lost — as opposed to material that's already mastered (no growth) or too far
+beyond current ability even with help (frustration, not learning). Matt Pocock's `/teach` skill scopes
+each lesson to sit in this band, assessed from the learner's prior state rather than a fixed curriculum.
+Deferred to Mode 3/v1.0 in this plan's build sequence, since it depends on the persistent per-topic state
+that only the mastery track maintains.
+
+**Evidence classification.** The discipline of tagging every piece of personalized context by what kind
+of claim it actually is — observed fact, user-stated preference, saved belief (from the second brain),
+external-source claim, agent inference, or the user's current decision — rather than treating all of it
+as equally solid "knowledge." The point is that personalization should inform recommendations, but only
+the user's present decision should control the learning path; a saved belief from six months ago
+shouldn't silently override what the user actually wants today. Declared a *principle* in v0.1 (name it
+when citing a saved belief, don't assume it) with the full structured schema deferred to v0.2 — seeing
+this fully specified in one v0.1 session isn't required before it's useful in a lighter form.
+
+**Failure-analysis + verification gate.** A requirement this plan adds on top of both source
+methodologies, not present natively in either: for any professionally actionable topic, a concept isn't
+considered learned until the user can also name its likely failure modes, describe how they'd test for
+them, and state how success would be measured — not just explain the concept and build something with
+it. This reflects the user's actual job (Software Verification Engineer) and existing annual goals found
+in the brain (Software Quality Metrics, Test Suite Automation), and is meant to prevent the common
+AI-assisted-learning failure of acquiring enough vocabulary to sound informed without being able to
+evaluate or troubleshoot the real thing.
