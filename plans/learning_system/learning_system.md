@@ -92,35 +92,67 @@ spaced-repetition ledger, no evidence-classification schema. (Multi-source groun
 live external research — is in scope from v0.1; it's not part of the deferred second-brain integration,
 it's how the skill avoids being limited to only what's already been captured.)
 
-Collapsed to 5 visible moves (not 10 — see fixes below):
-1. Mission + depth (what are you trying to accomplish, what decision/build depends on it, target
-   competency — default to "practitioner" and infer from the stated decision rather than asking cold)
-2. Smallest knowledge gap + grounded explanation — sourced from **both** the second brain (saved
-   beliefs, prior related captures, `get_context`/`semantic_search`) **and** live external research
-   (web search/fetch for current authoritative sources — official docs, papers, credible practitioners,
-   per Marchese's "alpha farming" principle of seeking real practitioners over generic influencers). The
-   second brain is a fast, personalized starting point, not the ceiling — it only contains what's already
-   been captured, which is a strict subset of what's authoritative on a given topic, and relying on it
-   alone would recursively limit every mission to previously-consumed content.
+**v0.1 eligibility (resolved — flagged as inconsistent by the GPT 5.6 Sol review):** Mode 2 accepts a
+request when a bounded applied exercise can be named for it — this covers both **professionally
+actionable** topics (tied to a current/near-term responsibility) and **capability-building** topics
+(closes an identified gap, no immediate deliverable, but still supports a real exercise). **Curiosity-only**
+requests (no planned application, nothing to build or decide) are declined in v0.1 with an explicit
+message — "This sounds like Mode 1 (quick explanation), which isn't built yet; want to give it a bounded
+application instead, or just ask me directly?" — rather than silently run through the full cycle anyway.
+The cross-cutting non-negotiables (failure analysis, verification evidence) apply to **both** accepted
+categories, not just professionally actionable ones — a capability-building mission still has to survive
+contact with "how would this fail, how would you test it," it just doesn't have an immediate deliverable
+forcing the question.
 
-   Explanation itself follows Marchese's **three-step learning ladder** (the actual capture that
-   motivated building this system in the first place — second-brain thought `159e464a`, from the same
-   video): (a) **"Explain it like I'm 5/12/18"** — force simplification; a domain analogy the user
-   already knows well (sports, cooking, whatever fits) is an explicit variant of this step, not a
-   separate add-on; (b) **level-two analysis — why this matters to the user specifically**, not just
-   the abstract concept, tied back to the mission from Step 1; (c) **ground it in what the user is
-   already working on** — if that context is missing or ambiguous, interview for it rather than
-   guessing. All three steps run in sequence before the applied exercise; this replaces an earlier,
-   thinner "just add one ELI5 sentence" version of this step.
-3. Applied exercise (smallest useful implementation or decision exercise)
-4. Teach-back + completion gate (see remediation path below; operationalizes the same idea as the
-   "mic test" technique captured from the same Marchese video — thought `b8ec8883` — explain aloud,
-   surface gaps from what you can't yet say)
-5. Concise learning record + recommended next step (continue / apply / pause / graduate)
+### v0.1 interaction state machine (literal, not prose guidance)
+
+Each step below has an exact opening move, exact fields, and an exact transition/exit rule — added
+because "infer from the stated decision rather than asking cold" was previously guidance, not gate logic,
+and a fresh build would have invented these differently every time.
+
+**Step 1 — Mission + depth.**
+- Opening question (single turn, not a multi-question form): *"What are you trying to learn, and what
+  decision or thing you're building does it support?"*
+- Required before Step 2: `topic` (string) and `application` (what decision/build depends on it — may be
+  "just curious," which triggers the eligibility decline above).
+- `target_competency`: infer from the stated application if a competency level is implied (e.g. "I need
+  to decide whether to add X" → practitioner/independent practitioner; "I need to defend this design
+  choice to my team" → architect); otherwise **default to practitioner** without asking. Never ask the
+  user to pick from the four-level list cold — that's an implementation detail of this skill, not
+  something the user should have to know unprompted.
+- Exit: if the user gives only a bare topic with no application ("teach me reranking"), ask the Step 1
+  question once more, specifically for the missing `application` field, before proceeding. Do not proceed
+  to Step 2 without `application` filled in (even if it's "just curious," which then triggers the decline
+  above).
+- Once `topic` + `application` + `target_competency` are set, state the normalized mission back in one
+  sentence (e.g. *"Mission: determine whether adding a reranker is worth it for your RAG prototype,
+  targeting independent-practitioner depth."*) and proceed directly into Step 2 — no separate approval
+  round-trip required unless the user objects to the restated mission.
+
+**Step 2 — Grounded explanation.** See "Sourcing and grounding contract" below for the exact tool
+sequence; this step's *output* structure is: run the three-step learning ladder (see "Learning ladder —
+exact output shape" below), then a short grounding note listing what came from the second brain vs. live
+research (feeds `SOURCES.md`).
+
+**Step 3 — Applied exercise.** See "Applied-exercise contract" below.
+
+**Step 4 — Teach-back + completion gate.** See "Decision definitions and generic rubric rule" below.
+
+**Step 5 — Learning record + next step.** Write `RECORD.md` (template below) and state one of
+`continue` / `apply` / `pause` / `graduate` (defined below) as the session's outcome, with a one-line
+reason.
+
+**"I just need the answer" exit (any step):** if the user says this explicitly, stop teaching, give the
+plain answer/explanation directly, skip teach-back and the completion gate, and write a `RECORD.md` that
+says so plainly (outcome: `paused`, reason: "user requested direct answer, not a verified cycle") rather
+than fabricating a passed gate. This is a legitimate exit, not a failure state.
+
 
 **v0.2 — after several real uses.** Improve friction points found in practice; add the evidence
 classification schema (see fixes below — deferred here deliberately, not because it's optional forever);
-add explicit continue/pause/graduate as a first-class decision; refine the learning-record structure
+add richer continue/pause/graduate *state management* (multi-session history, re-opening a paused topic)
+— the four outcomes themselves are already defined in v0.1 below, since `graduate` already has a
+real side effect (second-brain capture) that can't be deferred; refine the learning-record structure
 based on what v0.1 actually needed.
 
 **v0.3 — only after Mode 2 proves useful.** Add Mode 1 (quick explanation) and the routing shell that
@@ -130,9 +162,122 @@ dispatches between modes based on the relevance-gate + competency-target answers
 workspace, spaced retrieval, ZPD-scoped lessons, deeper mastery records, scheduled reassessment (the
 Pocock mechanisms, now earned rather than assumed).
 
+## Learning ladder — exact output shape
+
+Resolves an ambiguity the GPT 5.6 Sol review correctly flagged: "explain it like I'm 5/12/18" does
+**not** mean producing three redundant explanations at three ages, and the "sequence" referred to is
+simplify → why it matters → ground in my situation, not 5 → 12 → 18. The actual output for Step 2 is
+exactly three short parts, in this order, with no more than one explanation per part:
+
+1. **Simple model** — one short analogy or plain-language explanation, at whatever single age-level
+   depth actually fits the concept and the user's stated familiarity (the skill picks one level, it
+   doesn't ask which of 5/12/18, and doesn't produce more than one). A domain analogy the user already
+   knows (sports, cooking, whatever fits the concept) is a valid substitute for a literal "like I'm 5"
+   framing, not an additional fourth part.
+2. **Why it matters here** — one paragraph tying the concept directly to the mission from Step 1, not a
+   generic "this is important because..." statement.
+3. **Concrete mapping** — one paragraph mapping the concept onto the user's actual system, decision, or
+   artifact (asking a clarifying question first if that context wasn't given in Step 1).
+
+Multiple age-level explanations are only produced if the user explicitly asks for a different depth after
+seeing part 1 — never proactively.
+
+## Decision definitions and generic rubric rule
+
+The GPT 5.6 Sol review correctly found these conflated into one vague "completion gate" — worth keeping
+distinct even in v0.1, since the pilot's own worked example shows what happens if they aren't (a 3-point
+teach-back rubric can pass while a 6-point competency contract and the mandatory failure-analysis gate
+are still unmet). Five separate decisions, evaluated at Step 4/5:
+
+- **Teach-back passed** — the user's own words (not the model's) satisfy the rubric written in Step 2
+  (see the generic rubric rule below). This is a necessary but not sufficient condition for anything else
+  on this list.
+- **Exercise verified** — the Step 3 applied exercise produced the observable output/decision defined in
+  its exercise contract (see "Applied-exercise contract" below) — e.g., the comparison actually ran and
+  produced a result, not just that code was written.
+- **Failure-analysis satisfied** — the user named at least two concrete failure modes for the concept
+  (not generic ones) and how each would be detected — this is the mandatory gate from the "Why a custom
+  skill" section, evaluated here explicitly rather than assumed to happen inside teach-back.
+- **Mission completed** — teach-back passed **and** exercise verified **and** failure-analysis satisfied.
+  This is the bar for a normal, successful v0.1 session — not the same thing as "graduated."
+- **Graduated** — every item in the competency contract (see below) is separately checked off, not just
+  "mission completed." A mission can be `completed` without being `graduated` (e.g., independent
+  practitioner-level contract items remain outstanding even though this session's narrower mission was
+  satisfied) — the learning record must say which is true, not conflate them.
+
+**Generic rubric-construction rule** (used to write both the teach-back rubric and the competency
+contract for *any* topic, not just the pilot's pre-written example): a rubric must cover, at minimum:
+1. The core mechanism (what the concept actually does).
+2. Mission-specific relevance (why *this* mission needs it, not textbook importance).
+3. At least one tradeoff or boundary condition (when this concept is *not* the right call).
+4. At least two concrete, non-generic failure modes.
+5. How each of those failure modes would be detected/tested.
+6. How success would be measured for the stated mission.
+
+Write this rubric during Step 2 (before teaching), state it to the user verbatim at Step 4 grading time,
+and grade only against it — never expand or shrink criteria after the fact.
+
+**Remediation path (unchanged from the Opus 5 review, restated here since it's part of this same gate):**
+on a miss, name the specific unmet criterion, re-teach only that part, retry once; on a second miss, log
+it as a Remaining Gap in `RECORD.md` and end the session — don't loop indefinitely. Scaffolding, coaching,
+and debugging the user's own exercise attempt is allowed and expected; the one bright line is never
+supplying the teach-back's own answer in the user's place, even if asked twice — offer the plain
+explanation and end the cycle instead of quietly filling in their teach-back for them.
+
+## Applied-exercise contract (Step 3)
+
+Resolves the previously unspecified "smallest useful implementation or decision exercise." Every
+exercise, regardless of topic, is scoped by naming these fields up front (part of the Step 2 → Step 3
+transition, stated to the user before starting):
+
+- **Type** — coding exercise (something is built/run) or decision exercise (a real comparison/analysis
+  produces a recommendation) — chosen based on whether the mission's `application` from Step 1 is a
+  build or a decision. RAG reranking is a decision exercise (compare with/without reranker); learning a
+  new tool's API might be a coding exercise (build the smallest thing that calls it).
+- **Timebox** — default 30–45 minutes of the ~60-minute session envelope; state it up front so scope stays
+  bounded.
+- **Baseline/control** — what "without the concept" looks like, when the exercise is a comparison (e.g.
+  retrieval quality without a reranker, as the control for retrieval quality with one).
+- **Observable output** — the concrete artifact or result that will exist when the exercise is done (a
+  yes/no recommendation with supporting numbers; a small script that runs; a written comparison) — this
+  is what "exercise verified" above checks against.
+- **Blocked-exercise fallback** — if a prerequisite is missing (no dataset, no credentials, a dependency
+  won't install) inside the timebox, downgrade to the smallest exercise that's still actually runnable
+  with what's available, note the downgrade in `RECORD.md`, and don't stall the session trying to fix
+  the environment.
+
+The skill may scaffold starter code, explain unfamiliar syntax, and help debug the user's own attempt —
+none of that violates "don't complete the user's thinking"; only producing the exercise's *conclusion* or
+the teach-back's *answer* on the user's behalf does.
+
+## Sourcing and grounding contract (Step 2)
+
+Resolves the previously unspecified tool-call sequence. Step 2 always runs, in this order:
+
+1. Call `get_context` (or `semantic_search` if `get_context` returns nothing relevant) with the
+   normalized mission from Step 1 — surfaces prior second-brain captures and saved beliefs.
+2. Run live external research (web search/fetch) targeting, at minimum: one primary/official source
+   (docs, spec, paper) and one practitioner source (a real implementer or maintainer, per "alpha
+   farming" — not a generic influencer roundup). A third evaluation/failure-analysis source is added
+   when the topic backlog's failure-analysis gate needs it.
+3. Merge into a short grounding note (feeds `SOURCES.md`): each claim used in the ladder explanation is
+   tagged with where it came from — second brain vs. freshly researched — per the "never
+   second-brain-only" requirement above.
+4. **If sources disagree, or nothing authoritative turns up:** state the disagreement/gap plainly to the
+   user, downgrade the mission's expected outcome to "needs experiment" instead of a confident answer,
+   and proceed to Step 3 anyway rather than stalling (this was Opus 5 review fix #7 — restated here with
+   the actual mechanism, not just the principle).
+5. **If second-brain MCP tools are unavailable** (the skill's `compatibility` frontmatter names them but
+   they're unreachable at runtime): proceed on live external research alone, note the degraded grounding
+   in `SOURCES.md`, and do not block the session — second-brain grounding is valuable, not mandatory
+   infrastructure.
+
 ## Fixes from the Opus 5 review (apply before/while building v0.1)
 
-Two real contradictions, plus simplifications — all reduce scope, none add it:
+Two real contradictions, plus simplifications — all reduce scope, none add it. (A second, independent
+adversarial review by GPT 5.6 Sol found further gaps beyond this list — those are called out inline below
+where they extend an existing fix, and covered by the new sections above and the "Artifact storage"
+rewrite below.)
 
 1. **Evidence classification is a principle in v0.1, not a schema.** It was declared a "hard requirement
    from the first version" while also being deferred to v0.2 in the build sequence — pick one. v0.1
@@ -143,21 +288,30 @@ Two real contradictions, plus simplifications — all reduce scope, none add it:
    re-teach only that, retry once; on a second miss, log it as a Remaining Gap and end the session
    anyway (don't loop indefinitely). Add an honest "I just need the answer" exit that ends the session
    without faking a teach-back — for a personal skill, abandonment is the dominant failure mode, not
-   shallowness.
+   shallowness. **Expanded:** see "Decision definitions and generic rubric rule" above — a second,
+   independent review (GPT 5.6 Sol) found this single "completion gate" was actually conflating five
+   different decisions (teach-back passed / exercise verified / failure-analysis satisfied / mission
+   completed / graduated), which is now resolved there.
 3. **Self-grading has no independent check.** Same model teaches and evaluates. Mitigate, don't solve:
    write the rubric *before* teaching and restate it verbatim at grading time; require the user's answer
    in their own words before any model commentary; make "don't complete the user's thinking" a rule about
    one observable behavior (never supply the exercise's answer even if asked twice — offer the plain
    explanation and end instead).
 4. **Cut v0.1 to 5 steps, not 10.** Steps 1–4 of the original draft collapse into one exchange;
-   "assess current understanding" is inferred from the teach-back, not asked upfront.
+   "assess current understanding" is inferred from the teach-back, not asked upfront. The 5 steps are
+   still the visible shape of a session; the "v0.1 interaction state machine" section above adds the
+   exact mechanics inside each step without adding new user-facing steps.
 5. **Pilot success criteria must be falsifiable, not a 10-item subjective checklist.** See below.
 6. **Define state-file location and resume protocol now**, not as an afterthought — cheap to specify
    up front, expensive to retrofit once records exist. **Resolved:** see "Artifact storage" section below
    — a sibling `learning_lab` project, identified by its repo (not a hardcoded path), so it stays
-   reachable from any device that can clone/pull it, not just the one where it was first created.
+   reachable from any device that can clone/pull it, not just the one where it was first created. A
+   second review (GPT 5.6 Sol) found the *protocol* underneath that identity (clone discovery, dirty-tree
+   handling, commit/push timing) was still unspecified — resolved by simplifying v0.1's scope; see
+   "Artifact storage" below.
 7. **No failure branch specified for stale/conflicting/absent sources** in step 2 — the skill should
    state the disagreement, downgrade the outcome to "needs experiment," and proceed rather than stalling.
+   **Resolved:** see "Sourcing and grounding contract" above, item 4.
 
 ## Pilot
 
@@ -183,17 +337,32 @@ help, going in aware of the common failure modes).
 6. Name at least two ways a reranker itself can fail or mislead (e.g., overfit to the eval set, hides a
    bad base-retrieval result instead of fixing it).
 
-*Rubric* (written before teaching, restated verbatim at grading time, per fix #3): the teach-back passes
-only if the user's own words — not the model's — cover (a) what reranking does differently from initial
-retrieval, (b) why it costs something (latency/compute/complexity), and (c) at least one concrete
-scenario where skipping it would still be the right call. Partial/vague answers on any one of the three
-trigger the remediation path (name the gap, re-teach once, retry once, then log as a Remaining Gap).
+*Rubric* (written before teaching, restated verbatim at grading time, per fix #3, and now aligned with
+the "Decision definitions and generic rubric rule" section above rather than treated as one conflated
+gate). This mission has three separate checks, not one:
+- **Teach-back passed** — the user's own words (not the model's) cover: (a) what reranking does
+  differently from initial retrieval, (b) why it costs something (latency/compute/complexity), and
+  (c) at least one concrete scenario where skipping it would still be the right call. This checks
+  competency-contract items 1 and 4–5; it does **not** by itself satisfy items 2–3 or 6.
+- **Exercise verified** — the reranking step from competency-contract item 2 actually runs against the
+  small dataset from item 3, and produces the with/without comparison named in the applied-exercise
+  contract above (not just "I wrote the code").
+- **Failure-analysis satisfied** — competency-contract item 6 is its own independent check: at least two
+  concrete ways a reranker can fail or mislead, each with a way to detect it — checked separately so a
+  clean teach-back can't stand in for it.
+
+Partial/vague answers on any one of the three checks trigger the remediation path (name the gap, re-teach
+only that part, retry once, then log as a Remaining Gap) — a Remaining Gap on one check doesn't block the
+other two from passing; **mission completed** requires all three, and **graduated** additionally requires
+the user affirms the full competency contract (all 6 items) holds, per the generic rubric rule.
 
 **Pilot success criteria (3, not 10):**
 1. Did the session end with a defensible yes/no on the reranker?
 2. Did it fit one sitting (~60 minutes)?
 3. Did the user voluntarily start a second topic within two weeks? (If not, v0.2 should *subtract*
-   process, not add it.)
+   process, not add it.) **Note:** unlike criteria 1–2, this one isn't skill-enforced or checkable from
+   any artifact — it's a manually-observed judgment call the user makes about their own follow-through,
+   not something `.github/skills/learn/SKILL.md` can verify itself.
 
 ## Topic backlog (from the assessment, ranked by the assessment's own priority ordering)
 
@@ -258,16 +427,32 @@ backlog item generalizes the sync.
 ledgers) live in a new sibling project, not inside this repo — identified as its own git repo, not a
 fixed local path.** This distinction matters beyond tidiness: a bare local folder only exists on one
 machine, but a git repo is clonable/pullable/pushable from anywhere with git and auth — including a
-mobile Claude Code session that has no access to an arbitrary desktop filesystem path. The skill should
-resolve `learning_lab` by **repo identity (its GitHub URL)**, not a hardcoded absolute path — clone it to
-whatever local cache location makes sense for the current environment if it isn't already present, work
-in it, then commit and push at natural checkpoints (record write, graduation). This sidesteps a known,
-already-flagged mistake: `/transcript`'s own doc admits its output path is "hardcoded for the home
-Windows PC" and needs multi-machine support — no reason to repeat that here when we can see it coming.
-Repo name/path/URL still need to be confirmed before v0.1 (see Open decisions), but the identity model
-(repo, not path) is settled. **Scope note:** actually building/testing the mobile flow is explicitly out
-of scope for the v0.1 pilot, which stays desktop-only — this only affects how the storage model is
-*specified*, so it doesn't need to be rebuilt later.
+mobile Claude Code session that has no access to an arbitrary desktop filesystem path. Repo name/URL
+still need to be confirmed before v0.1 (see Open decisions), but the identity model (repo, not path) is
+settled.
+
+**v0.1 storage protocol — deliberately simplified (resolved per the GPT 5.6 Sol review):** the review
+correctly found that "clone by identity, discover existing clones, commit and push at natural
+checkpoints" was a full remote-git-automation protocol with no answers for dirty trees, push failures,
+merge conflicts, or offline use — too much infrastructure for a first pilot that's supposed to test the
+5-step pedagogy, not a sync system. **v0.1 requires a pre-cloned local `learning_lab` at a path the user
+confirms once** (e.g. an environment variable or a value recorded once in the skill's own notes) — the
+skill does **not** clone, discover multiple candidate clones, or push automatically in v0.1:
+1. If the confirmed local path doesn't exist or isn't a git repo, stop and ask the user to clone it
+   there first — don't attempt to `git clone`/create it automatically.
+2. Read/write files directly under `<learning_lab_path>/<topic-slug>/`.
+3. After writing `RECORD.md` (Step 5) or a `Graduate` outcome, run a local `git add` + `git commit` in
+   that repo (commit message: the topic slug + outcome, e.g. `"rag-reranking-evaluation: completed"`) —
+   **local commit only, no push.** Tell the user the commit happened and that pushing/syncing
+   `learning_lab` elsewhere is a manual step on their side.
+4. If the local git repo has uncommitted, unrelated changes already sitting in it (a dirty tree not
+   caused by this skill), stop and tell the user rather than committing over them.
+
+Full remote automation (clone-by-URL discovery, pull-before-read, push, conflict/failure handling) is
+**deferred to v0.2+**, once the pre-cloned-local model has actually been used and its friction points are
+known — this is the same "earn complexity through real use" discipline the rest of v0.1 already follows,
+applied to storage instead of pedagogy. The repo-identity decision itself doesn't need to be revisited
+when that happens; only the automation built on top of it does.
 
 **Why not inside `second_brain`:**
 - **Different artifact shape, different lifecycle.** Second brain's core data model is one atomic,
@@ -291,10 +476,10 @@ of scope for the v0.1 pilot, which stays desktop-only — this only affects how 
   `.claude/commands/transcript.md`) already writes its output to `C:\projects\youtube_transcript\`, a
   separate project. The learning skill (hosted in `second_brain/.github/skills/learn/`) writing to
   `learning_lab/` is the same pattern, not a new one — but resolved by repo identity rather than a
-  hardcoded path, per the mobile-access reasoning above.
+  hardcoded path, per the mobile-access reasoning above (even though v0.1 itself only reads/writes a
+  pre-cloned local copy, not the remote).
 
-**Proposed structure (per topic, git-tracked in its own repo, cloned by identity rather than assumed
-present at a fixed path):**
+**Proposed structure (per topic, git-tracked in its own repo, pre-cloned locally for v0.1):**
 
 ```
 learning_lab/
@@ -309,12 +494,99 @@ learning_lab/
     └── REVIEW.md                  # spaced-repetition ledger — Mode 3 / mastery-track topics only
 ```
 
-This also resolves the "state-file location" item from the Opus 5 review fixes above: the identity is
-`learning_lab` (a git repo, wherever it's cloned locally), the path within it is `<topic-slug>/`, the
-resume rule is "read `MISSION.md` + `RECORD.md` for this topic-slug at the start of any session that
-references it, cloning/pulling the repo first if needed," and cross-session continuity doesn't depend on
-`second_brain`'s workspace-per-cwd model at all — which is the right call, since a learning mission
-(e.g. "RAG") isn't tied to whatever project repo, or even device, you happen to be sitting at that day.
+**Resume behavior in v0.1 (resolved — GPT 5.6 Sol flagged this as incomplete despite being called
+"resolved"):** v0.1 supports single-sitting missions plus exact-slug resume only — no fuzzy topic
+matching, no "what was I working on" inference. To resume, the user names the topic-slug (or the skill
+asks for it if the request is ambiguous, e.g. "continue my RAG work" when multiple RAG-adjacent slugs
+exist); the skill then reads `MISSION.md` + `RECORD.md` for that exact slug before continuing. Reopening
+a topic already marked `graduate` starts a **new**, explicitly-named follow-on mission (its own slug),
+not a silent re-edit of the graduated one. Richer resume mechanics (partial-session recovery, fuzzy
+matching, mission-drift reconciliation) are v0.2+ work, once real resume patterns are observed.
+
+### Artifact templates (resolved — these were referenced above but never actually defined)
+
+**`<topic-slug>/MISSION.md`** — written at the end of Step 1:
+```markdown
+# Mission: <topic title>
+
+- **Slug:** <topic-slug>
+- **Started:** <date>
+- **Mode:** 2 (professionally-actionable / capability-building)
+- **Target competency level:** <awareness | practitioner | independent practitioner | architect>
+- **Bounded exercise (named at admission):** <one sentence — what will actually get built/run/measured>
+
+## Competency contract
+By the end of this mission I can:
+1. <"I can ..." statement>
+2. <"I can ..." statement>
+3. <"I can ..." statement>
+(3–6 statements; see "Decision definitions and generic rubric rule" for how these are derived)
+
+## Mission statement
+<the falsifiable, narrowed statement from Step 1 — not an open-ended study>
+```
+
+**`<topic-slug>/SOURCES.md`** — written at the end of Step 2:
+```markdown
+# Sources: <topic title>
+
+## From second brain (prior captures — treated as saved belief, not fact)
+- <thought id / title> — <one line on relevance>
+
+## Freshly researched for this mission
+- **Official/primary:** <source name + link> — <one line on what it establishes>
+- **Practitioner:** <source name + link> — <one line on what it establishes>
+
+## Disagreements or gaps found
+<state plainly if sources conflicted or nothing authoritative turned up — see the sourcing/grounding
+contract's fallback rule; leave "None" if not applicable>
+```
+
+**`<topic-slug>/RECORD.md`** — written/updated at the end of Step 5, one per mission:
+```markdown
+# Record: <topic title>
+
+- **Slug:** <topic-slug>
+- **Mission:** <one line, copied from MISSION.md>
+- **Outcome:** <continue | paused | teach-back passed | exercise verified |
+  failure-analysis satisfied | graduated>
+
+## Demonstrated understanding
+<what the teach-back actually showed, in the user's own words / paraphrase>
+
+## Exercise + verification evidence
+<what was built/run/measured; the observable output named in the applied-exercise contract; actual
+result, not just "done">
+
+## Teach-back result
+<pass/fail against the rubric written at Step 1/2, restated verbatim here, with the grading applied>
+
+## Failure modes + tests (mandatory failure-analysis gate)
+<the specific failure mode(s) explored and what test/check would catch each — this is checked
+independently of the teach-back rubric; see "Decision definitions and generic rubric rule">
+
+## Remaining gaps
+<anything the rubric didn't cover, or a remediation retry that still missed on the second attempt —
+logged here rather than looped on indefinitely>
+
+## Recommended next step
+<e.g. "graduate," "continue in a follow-on session," "revisit exercise with a harder case">
+
+## Artifact paths
+- Mission: `<topic-slug>/MISSION.md`
+- Sources: `<topic-slug>/SOURCES.md`
+- Exercise: `<topic-slug>/exercises/...`
+```
+
+**`learning_lab/README.md` topic-index entry** — one row appended/updated per topic:
+```markdown
+| Topic slug | Title | Status | Last updated |
+|---|---|---|---|
+| rag-reranking-evaluation | RAG reranking evaluation | graduated | 2025-01-15 |
+```
+`Status` uses the same outcome vocabulary as `RECORD.md`'s Outcome field, collapsed to whichever is most
+recent — this file is the equivalent of `CURRENT.md`'s role for `second_brain`, a fast human-scannable
+index rather than the durable record itself.
 
 ## Sourcing requirement — never second-brain-only
 
@@ -341,6 +613,20 @@ research, and must never be treated as the sole source of truth for a learning m
 `learning_lab/<topic-slug>/` path, not a duplicate of the full record. This makes graduated learning
 surface in `get_context`/`semantic_search`/wiki compiles alongside everything else in the brain, while
 `learning_lab` remains the durable, detailed record.
+
+**Exact ordering and payload (resolved — previously unspecified):** finalize `RECORD.md` → commit it
+locally (per the v0.1 storage protocol above) → **only then** call `capture_thought`, so the pointer
+never references a record that doesn't exist yet in `learning_lab`. If the local commit fails for any
+reason, skip the capture and tell the user, rather than capturing a pointer to an uncommitted state.
+
+`capture_thought` text template:
+```
+Graduated: <topic> — <one-line mission>. Demonstrated: <competency level reached>. Outcome: <what the
+competency contract confirmed>. Full record: learning_lab/<topic-slug>/RECORD.md
+```
+No special category is forced — let the second brain's own classification apply naturally, same as any
+other capture. If a topic graduates a second time (a follow-on mission under a new slug, per the resume
+behavior above), it gets its own new capture — never edits or overwrites a prior graduation thought.
 
 ## Open decisions (resolve before or during v0.1 build)
 
