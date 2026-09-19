@@ -71,8 +71,11 @@ vibes:
   Can't yet troubleshoot novel failures alone or defend a design choice against alternatives. Default
   target for Mode 2 when nothing else is specified.
 - **Independent practitioner** — can implement *and* troubleshoot without step-by-step assistance;
-  knows the common failure modes going in, not just after hitting them. The bar most Mode 2 missions
-  should realistically aim for if they run long enough to include real failure analysis.
+  knows the common failure modes going in, not just after hitting them. Many Mode 2 missions *target*
+  this level, but a single session's teach-back plus one guided exercise is not, by itself, sufficient
+  evidence to certify it — see "What 'completed'/'graduated' actually certify" below, which requires an
+  added diagnose-or-transfer check (an unrehearsed fault or variant, handled with less scaffolding)
+  before graduating a mission at this level or above.
 - **Architect** — can select between competing designs and defend the tradeoffs (cost, latency,
   complexity, risk) for a specific situation, not just describe how each option works. Requires having
   seen or built more than one approach — usually needs Mode 3's sustained exposure, not a single Mode 2
@@ -103,6 +106,17 @@ The cross-cutting non-negotiables (failure analysis, verification evidence) appl
 categories, not just professionally actionable ones — a capability-building mission still has to survive
 contact with "how would this fail, how would you test it," it just doesn't have an immediate deliverable
 forcing the question.
+
+**Prerequisite override (added per a GPT 5.6 Sol methodology review):** the topic backlog is ranked by
+applied-ROI ("Tool orchestration" outranks "LLM foundations," for instance), which risks the user
+accumulating applied recipes without the foundational concepts those recipes actually depend on (e.g. a
+RAG mission may silently assume understanding of recall, ranking metrics, or embedding behavior). This
+doesn't mean re-litigating ROI ranking or turning Mode 2 into a foundations course: if, during Step 2's
+grounding or Step 3's exercise, a missing foundational concept is actually blocking correct
+interpretation of the mission's own result (not just "would be nice to know"), name it explicitly, teach
+the minimum needed to make the current mission's reasoning valid, and note it in `RECORD.md` as an
+absorbed prerequisite — don't silently work around it or let the mission's conclusion rest on an
+unexamined gap.
 
 ### v0.1 interaction state machine (literal, not prose guidance)
 
@@ -138,9 +152,9 @@ research (feeds `SOURCES.md`).
 
 **Step 4 — Teach-back + completion gate.** See "Decision definitions and generic rubric rule" below.
 
-**Step 5 — Learning record + next step.** Write `RECORD.md` (template below) and state one of
-`continue` / `apply` / `pause` / `graduate` (defined below) as the session's outcome, with a one-line
-reason.
+**Step 5 — Learning record + next step.** Write `RECORD.md` (template below) and state the session
+outcome — `paused` / `completed` / `graduated` (see "Outcome vocabulary" below) — plus a free-text
+recommended next step, with a one-line reason.
 
 **"I just need the answer" exit (any step):** if the user says this explicitly, stop teaching, give the
 plain answer/explanation directly, skip teach-back and the completion gate, and write a `RECORD.md` that
@@ -150,8 +164,8 @@ than fabricating a passed gate. This is a legitimate exit, not a failure state.
 
 **v0.2 — after several real uses.** Improve friction points found in practice; add the evidence
 classification schema (see fixes below — deferred here deliberately, not because it's optional forever);
-add richer continue/pause/graduate *state management* (multi-session history, re-opening a paused topic)
-— the four outcomes themselves are already defined in v0.1 below, since `graduate` already has a
+add richer multi-session state management (re-opening a `paused` topic, resuming across sessions) — the
+outcome vocabulary itself is already defined in v0.1 below, since `graduated` already has a
 real side effect (second-brain capture) that can't be deferred; refine the learning-record structure
 based on what v0.1 actually needed.
 
@@ -187,35 +201,85 @@ seeing part 1 — never proactively.
 The GPT 5.6 Sol review correctly found these conflated into one vague "completion gate" — worth keeping
 distinct even in v0.1, since the pilot's own worked example shows what happens if they aren't (a 3-point
 teach-back rubric can pass while a 6-point competency contract and the mandatory failure-analysis gate
-are still unmet). Five separate decisions, evaluated at Step 4/5:
+are still unmet). A **second** GPT 5.6 Sol pass then found the fix itself still ambiguous (does the
+teach-back rubric's "generic rubric rule" also have to independently cover failure modes, duplicating the
+failure-analysis gate?) — resolved below by giving each of the three checks its **own** construction
+rule instead of one shared six-point rule. Three independent checks, each evaluated separately at
+Step 4/5, plus two roll-up decisions:
 
-- **Teach-back passed** — the user's own words (not the model's) satisfy the rubric written in Step 2
-  (see the generic rubric rule below). This is a necessary but not sufficient condition for anything else
-  on this list.
+- **Teach-back passed** — the user's own words (not the model's) satisfy the *teach-back rubric*
+  (construction rule below) written in Step 2. Necessary but not sufficient for anything else on this
+  list — it does **not** by itself cover failure modes or verified exercise output.
 - **Exercise verified** — the Step 3 applied exercise produced the observable output/decision defined in
   its exercise contract (see "Applied-exercise contract" below) — e.g., the comparison actually ran and
   produced a result, not just that code was written.
-- **Failure-analysis satisfied** — the user named at least two concrete failure modes for the concept
-  (not generic ones) and how each would be detected — this is the mandatory gate from the "Why a custom
-  skill" section, evaluated here explicitly rather than assumed to happen inside teach-back.
+- **Failure-analysis satisfied** — the *failure-analysis rubric* (construction rule below) is met —
+  checked independently so a clean teach-back can't stand in for it.
 - **Mission completed** — teach-back passed **and** exercise verified **and** failure-analysis satisfied.
-  This is the bar for a normal, successful v0.1 session — not the same thing as "graduated."
+  This is the bar for a normal, successful v0.1 session — not the same thing as "graduated," and it
+  reflects **provisional, session-bounded competence** demonstrated under active guidance, not
+  independently-verified mastery (see the "What 'completed'/'graduated' actually certify" note below —
+  this distinction matters and a fresh builder should not silently drop it).
 - **Graduated** — every item in the competency contract (see below) is separately checked off, not just
   "mission completed." A mission can be `completed` without being `graduated` (e.g., independent
   practitioner-level contract items remain outstanding even though this session's narrower mission was
-  satisfied) — the learning record must say which is true, not conflate them.
+  satisfied) — the learning record must say which is true, not conflate them. **If the mission's target
+  competency is independent practitioner or architect**, graduation additionally requires the
+  diagnose-or-transfer check below — a clean teach-back plus one exercise is not sufficient evidence for
+  those levels (see "What 'completed'/'graduated' actually certify").
 
-**Generic rubric-construction rule** (used to write both the teach-back rubric and the competency
-contract for *any* topic, not just the pilot's pre-written example): a rubric must cover, at minimum:
-1. The core mechanism (what the concept actually does).
-2. Mission-specific relevance (why *this* mission needs it, not textbook importance).
-3. At least one tradeoff or boundary condition (when this concept is *not* the right call).
-4. At least two concrete, non-generic failure modes.
-5. How each of those failure modes would be detected/tested.
-6. How success would be measured for the stated mission.
+**Construction rules — three separate rubrics, not one shared six-point rule** (used to write the
+teach-back rubric, the failure-analysis check, and the exercise's success measure for *any* topic, not
+just the pilot's pre-written example):
+- **Teach-back rubric** must cover: (1) the core mechanism (what the concept actually does), (2)
+  mission-specific relevance (why *this* mission needs it, not textbook importance), (3) at least one
+  tradeoff or boundary condition (when this concept is *not* the right call). It does **not** need to
+  cover failure modes or success measurement — those belong to the checks below.
+- **Failure-analysis rubric** must cover: (1) the single highest-risk failure mode for *this* mission
+  specifically (not a generic list), (2) one failure mode that would produce a **misleading success
+  signal** (looks fine, isn't) rather than an obvious break, and how each would be detected/tested.
+  Two items is a floor, not a target — pick the two that actually matter for this mission's risk profile,
+  not the first two that come to mind (this replaces the earlier "any two failure modes" framing, which
+  a GPT 5.6 Sol methodology review correctly flagged as an arbitrary coverage target that can be
+  satisfied with two obvious, low-risk failures while missing the dominant one).
+- **Exercise's success measure** must state, before the exercise runs: what observable output settles the
+  mission's question, and — for decision exercises specifically — the metric(s) that will decide the
+  yes/no recommendation, **committed to before the result is seen** (not chosen or adjusted afterward to
+  fit whatever the run produced).
 
-Write this rubric during Step 2 (before teaching), state it to the user verbatim at Step 4 grading time,
-and grade only against it — never expand or shrink criteria after the fact.
+Write all three during Step 2 (before teaching/before the exercise runs), state the teach-back rubric to
+the user verbatim at Step 4 grading time, and grade only against what was written — never expand or
+shrink criteria after the fact.
+
+**Cold-attempt check (Step 1→2 transition, before teaching):** ask the user for a brief unaided attempt
+first — "before I explain: what's your current guess at how this works, or how you'd approach it?" — one
+short answer, not a quiz. This isn't graded and doesn't block progress; it exists to (a) surface real
+prerequisite gaps before teaching starts, so Step 2's explanation can actually target what's missing
+instead of re-teaching what the user already knows, and (b) give Step 4 a genuine before/after comparison
+instead of only a single post-teaching data point. If the user has no attempt to offer ("no idea, go
+ahead"), proceed straight to Step 2 — this is a lightweight prompt, not a mandatory gate.
+
+**What "completed"/"graduated" actually certify (added per a GPT 5.6 Sol methodology review — this is a
+real, load-bearing scope decision, not just phrasing):** a single ~60-minute session with teach-back and
+one applied exercise is real evidence of **guided, immediate, task-bounded understanding** — it is not
+strong evidence of unaided transfer to a different case, unaided troubleshooting of an unrehearsed
+failure, or retention past the session. v0.1 does not pretend otherwise:
+- `completed` means exactly that: the mission's own bounded question got a defensible, verified answer
+  today, under this session's guidance. It is not a claim of durable or general mastery.
+- `graduated` at **practitioner** target competency uses the checks above as-is — teach-back + exercise +
+  failure-analysis is a reasonable bar for "practitioner," which is explicitly defined elsewhere in this
+  doc as capability *with guidance*.
+- `graduated` at **independent practitioner or architect** target competency additionally requires a
+  **diagnose-or-transfer check**: either (a) the user is given a seeded fault or an unfamiliar variant of
+  the exercise's problem (not rehearsed during teaching) and fixes/adapts it with materially less
+  scaffolding than Step 3 provided, or (b) if no such variant is practical inside the session's timebox,
+  the record explicitly states the competency is **provisional** and names the follow-up check needed
+  before it should be treated as verified independent capability. Silently awarding "independent
+  practitioner" off a single teach-back and one guided exercise is a graduation-gate failure, not an
+  acceptable simplification.
+- **Retention is out of scope for v0.1's gate, not ignored.** See "Retention checkpoint" below — a
+  Mode 2 completion (even a `graduated` one) records a fixed check-in point rather than asserting the
+  competency will still hold weeks later.
 
 **Remediation path (unchanged from the Opus 5 review, restated here since it's part of this same gate):**
 on a miss, name the specific unmet criterion, re-teach only that part, retry once; on a second miss, log
@@ -223,6 +287,43 @@ it as a Remaining Gap in `RECORD.md` and end the session — don't loop indefini
 and debugging the user's own exercise attempt is allowed and expected; the one bright line is never
 supplying the teach-back's own answer in the user's place, even if asked twice — offer the plain
 explanation and end the cycle instead of quietly filling in their teach-back for them.
+
+## Outcome vocabulary (canonical — resolves a contradiction the second GPT 5.6 Sol review found)
+
+Three different, non-matching outcome lists existed in earlier drafts (Step 5's `continue/apply/pause/
+graduate`, `RECORD.md`'s six-value list mixing session outcomes with individual gate names, and a commit
+message using `"completed"`, which appeared in neither). One canonical model, used everywhere in this
+doc from here on:
+
+- **Session outcome** (exactly one value, written to `RECORD.md`'s Outcome field, `README.md`'s Status
+  column, and used in the local commit message) is one of: `paused` / `completed` / `graduated`.
+  - `paused` — the session ended without reaching mission completion: the "I just need the answer" exit,
+    a blocked exercise with no runnable fallback (see "Applied-exercise contract"), or the user stopping
+    early for any other reason. Not a failure state — just unfinished.
+  - `completed` — mission completed per the Decision Definitions above (teach-back + exercise +
+    failure-analysis all passed).
+  - `graduated` — the full competency contract is separately checked off (see above; independent
+    practitioner/architect targets additionally require the diagnose-or-transfer check).
+- **Gate results** (three independent fields inside `RECORD.md`, not folded into the single outcome
+  value above): `teach_back`, `exercise`, `failure_analysis` — each is `passed` or `unmet` (with the
+  specific Remaining Gap noted if `unmet` after one remediation retry).
+- **Recommended next step** (a separate `RECORD.md` field, free text, not a controlled vocabulary) is
+  where "apply this now" / "continue in a follow-on session" / "revisit with a harder case" belong — this
+  resolves what the earlier draft's `apply` and `continue` values were actually trying to express, without
+  overloading the outcome field with next-step guidance.
+
+## Retention — explicitly out of scope for v0.1, not silently ignored
+
+A GPT 5.6 Sol methodology review correctly noted that Mode 2 topics which never reach Mode 3 get **no**
+reinforcement in this design — immediate post-session performance is a poor proxy for retained
+understanding, and a `graduated` outcome today says nothing about whether the competency holds up in
+three weeks. A lightweight reminder-thought checkpoint was considered and deliberately **rejected** for
+v0.1 (not deferred by omission): a scheduled reminder the user is likely to dismiss unread creates a
+false sense that retention is being tracked when it isn't, which is worse than admitting it plainly.
+**v0.1's `RECORD.md`/`README.md` should therefore never imply durability** — `completed` and `graduated`
+both mean "verified today, under guidance," full stop; real reinforcement (spaced retrieval, scheduled
+reassessment) is Mode 3/v1.0 scope, built only once a topic has actually earned that investment through
+real reuse, per this doc's existing "earn complexity through real use" discipline.
 
 ## Applied-exercise contract (Step 3)
 
@@ -238,13 +339,22 @@ transition, stated to the user before starting):
   bounded.
 - **Baseline/control** — what "without the concept" looks like, when the exercise is a comparison (e.g.
   retrieval quality without a reranker, as the control for retrieval quality with one).
+- **Success measure, committed before the exercise runs** — for a decision exercise specifically, the
+  metric(s) that will decide the yes/no recommendation must be named *before* the comparison is run, not
+  chosen or adjusted afterward to fit whatever result came out (per a GPT 5.6 Sol methodology review —
+  this is what makes the recommendation actual evidence rather than a post-hoc rationalization of
+  whichever outcome felt right).
 - **Observable output** — the concrete artifact or result that will exist when the exercise is done (a
   yes/no recommendation with supporting numbers; a small script that runs; a written comparison) — this
   is what "exercise verified" above checks against.
-- **Blocked-exercise fallback** — if a prerequisite is missing (no dataset, no credentials, a dependency
-  won't install) inside the timebox, downgrade to the smallest exercise that's still actually runnable
-  with what's available, note the downgrade in `RECORD.md`, and don't stall the session trying to fix
-  the environment.
+- **Blocked-exercise fallback, with a terminal branch** — if a prerequisite is missing (no dataset, no
+  credentials, a dependency won't install) inside the timebox, downgrade to the smallest exercise that's
+  still actually runnable with what's available, note the downgrade in `RECORD.md`. **If no exercise at
+  all is runnable** with what's available (a GPT 5.6 Sol review correctly noted the earlier draft only
+  covered "downgrade," not "nothing works") — stop, do not attempt teach-back/completion-gate grading
+  without any exercise evidence, and end the session with outcome `paused`, naming the missing
+  prerequisite in `RECORD.md`'s Remaining Gaps as the reason. Don't stall trying to fix the environment
+  mid-session.
 
 The skill may scaffold starter code, explain unfamiliar syntax, and help debug the user's own attempt —
 none of that violates "don't complete the user's thinking"; only producing the exercise's *conclusion* or
@@ -296,7 +406,12 @@ rewrite below.)
    write the rubric *before* teaching and restate it verbatim at grading time; require the user's answer
    in their own words before any model commentary; make "don't complete the user's thinking" a rule about
    one observable behavior (never supply the exercise's answer even if asked twice — offer the plain
-   explanation and end instead).
+   explanation and end instead). **Extended:** a GPT 5.6 Sol methodology review noted these mitigations
+   still leave the model as both teacher and judge — the strongest available counter in v0.1 (short of
+   an external evaluator, which is out of scope) is to ground the exercise's own verdict in something
+   the model didn't get to shape after the fact: for decision exercises, the success measure/metrics are
+   committed to *before* the comparison runs (see "Applied-exercise contract"), so the recommendation is
+   evidence-backed rather than a post-hoc narrative fit to whatever came out.
 4. **Cut v0.1 to 5 steps, not 10.** Steps 1–4 of the original draft collapse into one exchange;
    "assess current understanding" is inferred from the teach-back, not asked upfront. The 5 steps are
    still the visible shape of a session; the "v0.1 interaction state machine" section above adds the
@@ -353,16 +468,25 @@ gate). This mission has three separate checks, not one:
 
 Partial/vague answers on any one of the three checks trigger the remediation path (name the gap, re-teach
 only that part, retry once, then log as a Remaining Gap) — a Remaining Gap on one check doesn't block the
-other two from passing; **mission completed** requires all three, and **graduated** additionally requires
-the user affirms the full competency contract (all 6 items) holds, per the generic rubric rule.
+other two from passing; **mission completed** requires all three. Because this mission's target
+competency is **independent practitioner**, **graduated** additionally requires the diagnose-or-transfer
+check (see "What 'completed'/'graduated' actually certify"): e.g., given a seeded fault in the retrieval
+pipeline (not one rehearsed during teaching), the user identifies and fixes it with materially less
+scaffolding than Step 3 provided. Affirming the full competency contract (all 6 items) without that
+check would overstate what a single teach-back and one guided exercise actually demonstrate.
 
 **Pilot success criteria (3, not 10):**
 1. Did the session end with a defensible yes/no on the reranker?
 2. Did it fit one sitting (~60 minutes)?
-3. Did the user voluntarily start a second topic within two weeks? (If not, v0.2 should *subtract*
-   process, not add it.) **Note:** unlike criteria 1–2, this one isn't skill-enforced or checkable from
-   any artifact — it's a manually-observed judgment call the user makes about their own follow-through,
-   not something `.github/skills/learn/SKILL.md` can verify itself.
+3. **Did the cold-attempt answer (Step 1→2 transition) show a real gain by the end of the session?**
+   Compare the user's unaided pre-teaching guess against their post-exercise teach-back/exercise result —
+   not "did they use more confident language," but "could they now do/explain something concretely they
+   couldn't before" (e.g. went from no mental model to a working with/without comparison and a stated
+   recommendation). This replaces an earlier draft's engagement-based criterion ("did the user start a
+   second topic within two weeks") — a GPT 5.6 Sol methodology review correctly pointed out that
+   engagement measures whether the *experience* was appealing, not whether the *teaching* worked; a
+   before/after comparison is directly evidence of learning, which is what this pilot is actually meant
+   to validate.
 
 ## Topic backlog (from the assessment, ranked by the assessment's own priority ordering)
 
@@ -416,6 +540,12 @@ this repo's own "under 200 lines, defer depth to reference files" belief already
 brain) — v0.1's 5-step Mode 2 flow should fit directly in `SKILL.md`; Mode 1/Mode 3 additions in v0.3/v1.0
 belong in `references/` until promoted.
 
+**Invocation mode (resolved — a GPT 5.6 Sol review flagged this as unspecified):** `disable-model-invocation:
+true`, same as `pick-up` — `/learn` runs only when explicitly invoked, never auto-triggered by the model
+noticing a learning-shaped request in conversation. This matches the deliberate, session-boundaried nature
+of the 5-step flow (mission framing, timeboxed exercise, teach-back) — auto-triggering mid-conversation
+risks starting a structured learning cycle the user didn't ask for at that moment.
+
 Note: cross-tool parity between `.claude/commands` and `.github/skills` formats is already a tracked
 backlog item (`plans/in_progress/cross_tool_skill_sync.md`); this skill launches in Agent Skills format
 only, consistent with `pick-up`, and can be back-ported to a `.claude/commands` version later if that
@@ -435,14 +565,20 @@ settled.
 correctly found that "clone by identity, discover existing clones, commit and push at natural
 checkpoints" was a full remote-git-automation protocol with no answers for dirty trees, push failures,
 merge conflicts, or offline use — too much infrastructure for a first pilot that's supposed to test the
-5-step pedagogy, not a sync system. **v0.1 requires a pre-cloned local `learning_lab` at a path the user
-confirms once** (e.g. an environment variable or a value recorded once in the skill's own notes) — the
-skill does **not** clone, discover multiple candidate clones, or push automatically in v0.1:
+5-step pedagogy, not a sync system. **v0.1 requires a pre-cloned local `learning_lab` located via one
+exact mechanism** — a second GPT 5.6 Sol pass correctly flagged the earlier "an environment variable or a
+value recorded once" phrasing as leaving the actual mechanism unchosen. **Resolved: an environment
+variable, `LEARNING_LAB_PATH`, read once at the start of Step 1.** If it's unset:
+- Stop before Step 1 proceeds and ask the user to set `LEARNING_LAB_PATH` to their local `learning_lab`
+  clone (or provide the path directly for that session) — don't guess a default location or silently
+  fall back to writing inside `second_brain`.
+- The skill does **not** clone, discover multiple candidate clones, or push automatically in v0.1:
 1. If the confirmed local path doesn't exist or isn't a git repo, stop and ask the user to clone it
    there first — don't attempt to `git clone`/create it automatically.
 2. Read/write files directly under `<learning_lab_path>/<topic-slug>/`.
-3. After writing `RECORD.md` (Step 5) or a `Graduate` outcome, run a local `git add` + `git commit` in
-   that repo (commit message: the topic slug + outcome, e.g. `"rag-reranking-evaluation: completed"`) —
+3. After writing `RECORD.md` (Step 5), run a local `git add` + `git commit` in
+   that repo (commit message: the topic slug + session outcome, e.g. `"rag-reranking-evaluation:
+   completed"` — using the canonical outcome vocabulary below, not the earlier ad hoc example) —
    **local commit only, no push.** Tell the user the commit happened and that pushing/syncing
    `learning_lab` elsewhere is a manual step on their side.
 4. If the local git repo has uncommitted, unrelated changes already sitting in it (a dirty tree not
@@ -499,13 +635,24 @@ learning_lab/
 matching, no "what was I working on" inference. To resume, the user names the topic-slug (or the skill
 asks for it if the request is ambiguous, e.g. "continue my RAG work" when multiple RAG-adjacent slugs
 exist); the skill then reads `MISSION.md` + `RECORD.md` for that exact slug before continuing. Reopening
-a topic already marked `graduate` starts a **new**, explicitly-named follow-on mission (its own slug),
+a topic already marked `graduated` starts a **new**, explicitly-named follow-on mission (its own slug),
 not a silent re-edit of the graduated one. Richer resume mechanics (partial-session recovery, fuzzy
 matching, mission-drift reconciliation) are v0.2+ work, once real resume patterns are observed.
 
 ### Artifact templates (resolved — these were referenced above but never actually defined)
 
-**`<topic-slug>/MISSION.md`** — written at the end of Step 1:
+**`<topic-slug>/MISSION.md`** — written in **two passes**, not one (a GPT 5.6 Sol review correctly found
+the original single "written at the end of Step 1" instruction contradicted the fact that the competency
+contract and bounded-exercise fields aren't actually decided until Step 2 and the Step 2→3 transition):
+- **Draft, at the end of Step 1:** create the file with everything Step 1 actually knows — `Slug`,
+  `Started`, `Mode`, `Target competency level`, and `Mission statement`. Leave `Bounded exercise` and
+  `Competency contract` as `(pending — finalized at Step 2)` placeholders rather than inventing them
+  early.
+- **Finalized, at the end of Step 2:** fill in `Bounded exercise` (from the Step 2→3 transition, per the
+  "Applied-exercise contract") and the full `Competency contract` (written alongside the teach-back
+  rubric and failure-analysis check, per "Decision definitions and generic rubric rule") — replacing the
+  placeholders. `MISSION.md` is not read as complete/reliable until this second pass; nothing downstream
+  (the exercise, the teach-back rubric) should be started before it is.
 ```markdown
 # Mission: <topic title>
 
@@ -513,14 +660,16 @@ matching, mission-drift reconciliation) are v0.2+ work, once real resume pattern
 - **Started:** <date>
 - **Mode:** 2 (professionally-actionable / capability-building)
 - **Target competency level:** <awareness | practitioner | independent practitioner | architect>
-- **Bounded exercise (named at admission):** <one sentence — what will actually get built/run/measured>
+- **Bounded exercise:** <one sentence — what will actually get built/run/measured>
+  (pending — finalized at Step 2 — until then)
 
 ## Competency contract
 By the end of this mission I can:
 1. <"I can ..." statement>
 2. <"I can ..." statement>
 3. <"I can ..." statement>
-(3–6 statements; see "Decision definitions and generic rubric rule" for how these are derived)
+(3–6 statements; see "Decision definitions and generic rubric rule" for how these are derived —
+pending — finalized at Step 2 — until then)
 
 ## Mission statement
 <the falsifiable, narrowed statement from Step 1 — not an open-ended study>
@@ -548,8 +697,14 @@ contract's fallback rule; leave "None" if not applicable>
 
 - **Slug:** <topic-slug>
 - **Mission:** <one line, copied from MISSION.md>
-- **Outcome:** <continue | paused | teach-back passed | exercise verified |
-  failure-analysis satisfied | graduated>
+- **Outcome:** <paused | completed | graduated>
+  (canonical session-outcome vocabulary — see "Outcome vocabulary"; NOT the same field as the gate
+  results below)
+- **Gate results:** teach_back=<passed|unmet>, exercise=<passed|unmet>, failure_analysis=<passed|unmet>
+
+## Cold-attempt baseline
+<the user's brief unaided guess/attempt from the Step 1→2 transition, verbatim or close paraphrase —
+used to compare against demonstrated understanding below>
 
 ## Demonstrated understanding
 <what the teach-back actually showed, in the user's own words / paraphrase>
@@ -570,7 +725,9 @@ independently of the teach-back rubric; see "Decision definitions and generic ru
 logged here rather than looped on indefinitely>
 
 ## Recommended next step
-<e.g. "graduate," "continue in a follow-on session," "revisit exercise with a harder case">
+<free text — e.g. "apply this recommendation now," "continue in a follow-on session," "revisit exercise
+with a harder case" — this is where the earlier draft's "apply"/"continue" outcome values actually
+belong; see "Outcome vocabulary">
 
 ## Artifact paths
 - Mission: `<topic-slug>/MISSION.md`
@@ -609,10 +766,10 @@ research, and must never be treated as the sole source of truth for a learning m
 
 ## Second-brain capture on graduation
 
-**Decided:** yes — a `Graduate` outcome captures a short thought (via `capture_thought`) pointing at the
-`learning_lab/<topic-slug>/` path, not a duplicate of the full record. This makes graduated learning
-surface in `get_context`/`semantic_search`/wiki compiles alongside everything else in the brain, while
-`learning_lab` remains the durable, detailed record.
+**Decided:** yes — a `graduated` session outcome captures a short thought (via `capture_thought`)
+pointing at the `learning_lab/<topic-slug>/` path, not a duplicate of the full record. This makes
+graduated learning surface in `get_context`/`semantic_search`/wiki compiles alongside everything else in
+the brain, while `learning_lab` remains the durable, detailed record.
 
 **Exact ordering and payload (resolved — previously unspecified):** finalize `RECORD.md` → commit it
 locally (per the v0.1 storage protocol above) → **only then** call `capture_thought`, so the pointer
@@ -634,8 +791,10 @@ behavior above), it gets its own new capture — never edits or overwrites a pri
   work on this actually starts. Not resolved yet; proposed name `learning_lab` as a starting point, its
   own git repo from session one (settled — see "Artifact storage," driven by the mobile-access
   requirement, not just exercises being real code) — but confirm the actual repo URL/org before creating
-  anything, and whether the initial local clone lives at `C:\projects\learning_lab\` on this machine or
-  wherever else it's cloned first.
+  anything. **The lookup mechanism itself is resolved** (the `LEARNING_LAB_PATH` environment variable,
+  see "Artifact storage") — what's still open is only the concrete value: where the initial local clone
+  lives (e.g. `C:\projects\learning_lab\`) and setting `LEARNING_LAB_PATH` to it before the first v0.1
+  run.
 
 ## Next step
 
@@ -649,41 +808,55 @@ checked.
 Terms used throughout this doc as shorthand, expanded here so the plan reads cold without needing the
 design conversation that produced it.
 
-**ELI5 / the learning ladder.** Marchese's three-step sequence for explaining any new concept: (1)
-"explain it like I'm 5/12/18" — force simplification, with a domain analogy the user already knows
-(sports, cooking, whatever fits) as an explicit variant of this step, not a separate technique; (2)
-"level-two analysis" — why this specific concept matters to *this* user, tied back to their stated
-mission, not an abstract textbook answer; (3) ground it in what the user is already working on,
-interviewing for missing context rather than guessing at it. It's the explanation half of Step 2 in this
-plan's v0.1 flow, and it's the specific capture (second-brain thought `159e464a`) that motivated building
-this system in the first place, rather than just using Claude ad hoc for one-off explanations.
+**Learning ladder.** Marchese's three-step sequence for explaining any new concept: (1) the "explain it
+like I'm 5/12/18" prompt — this means picking **one** appropriately simplified explanation for the
+concept and the user's stated familiarity, not producing three age-graded explanations; a domain analogy
+the user already knows (sports, cooking, whatever fits) is a valid way to do this, not a separate fourth
+technique; (2) "level-two analysis" (Marchese's own term) — why this specific concept matters to *this*
+user, tied back to their stated mission, not an abstract textbook answer; (3) ground it in what the user
+is already working on, interviewing for missing context rather than guessing at it. It's the explanation
+half of Step 2 in this plan's v0.1 flow, and it's the specific capture (second-brain thought `159e464a`)
+that motivated building this system in the first place, rather than just using Claude ad hoc for one-off
+explanations.
 
-**Alpha farming.** Marchese's term for deliberately seeking out people who are actually doing the thing —
-researchers, practicing engineers, maintainers of the relevant tool or library — instead of whichever
-content ranks highest or was produced by someone who learned the topic two weeks before making a video
-about it. In this plan it shows up as a requirement on Step 2's source-gathering: grounding must include
-live external research aimed at real practitioners, not just whatever the second brain already has saved
-or whatever a generic search surfaces first.
+**Alpha farming.** Marchese-specific shorthand — not standard research or educational terminology — for
+deliberately seeking out first-hand knowledge from people who have actually solved the problem
+(researchers, practicing engineers, maintainers of the relevant tool or library), then evaluating and
+corroborating what they say, rather than defaulting to whichever generic content ranks highest or was
+produced by someone who learned the topic two weeks before making a video about it. Finding a
+practitioner doesn't make their claims automatically authoritative — their relevant experience and
+whether their claims corroborate still matter. In this plan it shows up as a requirement on Step 2's
+source-gathering: grounding must include live external research aimed at real practitioners, not just
+whatever the second brain already has saved or whatever a generic search surfaces first.
 
-**Teach-back.** The core verification move: after being taught something, the user explains it back in
-their own words, unprompted, before the model offers any commentary. It's what actually distinguishes
-"can recognize the right words" from "understands the concept" — a user can nod along to a good
-explanation without being able to reproduce or apply it. In this plan it's Step 4's mandatory gate for
-Mode 2 and 3, with a defined remediation path (name the gap, re-teach once, retry once, then log as a
-Remaining Gap) rather than an infinite loop or a silent pass.
+**Teach-back.** The core verification move: the user explains a concept back in their own words, without
+hints, leading questions, or the model supplying the content — not literally "unprompted" (the model does
+ask for it), but unaided once asked. It's meaningful evidence that a user can produce an explanation of
+the concept beyond just recognizing it in someone else's words, but a passed teach-back is **not**, by
+itself, proof of practical application, troubleshooting ability, or mission completion — see "Decision
+definitions and generic rubric rule" above, where teach-back is explicitly one of three separate checks,
+not a stand-in for the other two. In this plan it's Step 4's mandatory gate for Mode 2 and 3, with a
+defined remediation path (name the gap, re-teach once, retry once, then log as a Remaining Gap) rather
+than an infinite loop or a silent pass.
 
-**Mic test.** The specific Marchese technique that teach-back operationalizes (second-brain thought
-`b8ec8883`): explain a concept out loud to Claude, and let its follow-up questions reveal blind spots you
-didn't know you had. The distinction from teach-back as described above is subtle but real — mic test is
-about *discovering* gaps through open-ended follow-up questioning, while this plan's teach-back gate is
-about *verifying* specific, pre-written rubric criteria were met. Both rely on the same underlying
-mechanism: you don't know what you don't understand until you try to say it out loud.
+**Mic test.** A related but distinct Marchese technique (second-brain thought `b8ec8883`): explain a
+concept out loud, and let open-ended follow-up questions reveal blind spots you didn't know you had. This
+plan's teach-back is **not** an implementation of the mic test — they're sibling techniques with
+different procedures and purposes: the mic test is exploratory and dialogic (follow-up questions probe
+for whatever gaps turn up), while this plan's teach-back is a bounded assessment graded against a fixed,
+pre-written rubric (open-ended follow-up questioning during a graded teach-back would risk giving hints
+and compromising the assessment). Both rely on the same underlying insight — you don't know what you
+don't understand until you try to say it out loud — but that's a shared root, not one technique
+implementing the other.
 
 **Smallest V1.** Marchese's build principle: once a concept is explained, don't keep studying it in the
-abstract — build the smallest possible real thing that uses it, immediately. The build itself becomes
-the teacher, surfacing gaps that reading or discussion alone wouldn't. This is Step 3 of the v0.1 flow
-("applied exercise") and is also why `learning_lab`'s per-topic structure includes an `exercises/`
-directory for real, runnable code rather than notes about code.
+abstract — produce the smallest concrete artifact, experiment, decision, or implementation that
+meaningfully exercises the concept and generates observable evidence, immediately. The artifact itself
+becomes the teacher, surfacing gaps that reading or discussion alone wouldn't. This isn't limited to
+runnable code — a decision exercise (a real comparison producing a recommendation, like the RAG reranking
+pilot) satisfies the same principle. This is Step 3 of the v0.1 flow ("applied exercise") and is also why
+`learning_lab`'s per-topic structure includes an `exercises/` directory for real, runnable code when the
+exercise type is a build, rather than notes about code.
 
 **Relevance gate.** The admission-time question Marchese's framework asks before any learning starts:
 why learn this at all? This plan classifies the answer into three buckets — professionally actionable
@@ -701,28 +874,33 @@ actually needs? It's deferred to Mode 3 in the current build sequence (v0.1's si
 cycle is short enough that scope drift is less of a risk, but it becomes necessary once missions span
 multiple sessions).
 
-**Zone of Proximal Development (ZPD).** A concept from educational psychology (Vygotsky): the band of
-difficulty just above what a learner can already do alone, where they can succeed with guidance and are
-stretched without being lost — as opposed to material that's already mastered (no growth) or too far
-beyond current ability even with help (frustration, not learning). Matt Pocock's `/teach` skill scopes
-each lesson to sit in this band, assessed from the learner's prior state rather than a fixed curriculum.
-Deferred to Mode 3/v1.0 in this plan's build sequence, since it depends on the persistent per-topic state
-that only the mastery track maintains.
+**Zone of Proximal Development (ZPD).** A concept from educational psychology (Vygotsky): the range of
+tasks a learner cannot yet perform independently but can perform with suitable guidance or
+collaboration — distinct both from material already mastered (no growth needed) and material too far
+beyond current ability even with help (frustration rather than learning). Matt Pocock's `/teach` skill
+scopes each lesson to sit in this range, assessed from the learner's prior state rather than a fixed
+curriculum. Deferred to Mode 3/v1.0 in this plan's build sequence, since it depends on the persistent
+per-topic state that only the mastery track maintains.
 
-**Evidence classification.** The discipline of tagging every piece of personalized context by what kind
-of claim it actually is — observed fact, user-stated preference, saved belief (from the second brain),
-external-source claim, agent inference, or the user's current decision — rather than treating all of it
-as equally solid "knowledge." The point is that personalization should inform recommendations, but only
-the user's present decision should control the learning path; a saved belief from six months ago
-shouldn't silently override what the user actually wants today. Declared a *principle* in v0.1 (name it
-when citing a saved belief, don't assume it) with the full structured schema deferred to v0.2 — seeing
-this fully specified in one v0.1 session isn't required before it's useful in a lighter form.
+**Evidence classification.** The discipline of tagging personalized context so it isn't all treated as
+equally solid "knowledge" — distinguishing at least two separate dimensions rather than one flat list:
+**provenance/derivation** (a user statement, an external source, a direct observation, an agent
+inference, a saved second-brain note) and **current authority/status** (a historical saved belief vs. the
+user's present-moment preference or decision). The point is that personalization should inform
+recommendations, but only the user's present decision should control the learning path; a saved belief
+from six months ago shouldn't silently override what the user actually wants today. Declared a
+*principle* in v0.1 (name it when citing a saved belief, don't assume it) — deliberately informal, not a
+strict one-tag-per-claim schema — with the full structured schema deferred to v0.2.
 
-**Failure-analysis + verification gate.** A requirement this plan adds on top of both source
-methodologies, not present natively in either: for any professionally actionable topic, a concept isn't
-considered learned until the user can also name its likely failure modes, describe how they'd test for
-them, and state how success would be measured — not just explain the concept and build something with
-it. This reflects the user's actual job (Software Verification Engineer) and existing annual goals found
-in the brain (Software Quality Metrics, Test Suite Automation), and is meant to prevent the common
-AI-assisted-learning failure of acquiring enough vocabulary to sound informed without being able to
-evaluate or troubleshoot the real thing.
+**Failure-analysis gate.** A requirement this plan adds on top of both source methodologies, not present
+natively in either — and, per "Decision definitions and generic rubric rule" above, a check that's
+**independently and narrowly scoped**, not the same thing as overall mission completion. Concretely: the
+single highest-risk failure mode for the specific mission, plus one failure mode that would produce a
+misleading success signal (looks fine, isn't) rather than an obvious break, each with how it would be
+detected. This is deliberately risk-based, not count-based — "any two failure modes" invites picking two
+easy, low-risk ones while missing the one that actually matters. Exercise verification (did the applied
+exercise produce its defined output) and success measurement (how the mission's own question gets
+answered) are separate checks, not folded into this gate. This reflects the user's actual job (Software
+Verification Engineer) and existing annual goals found in the brain (Software Quality Metrics, Test Suite
+Automation), and is meant to prevent the common AI-assisted-learning failure of acquiring enough
+vocabulary to sound informed without being able to evaluate or troubleshoot the real thing.
