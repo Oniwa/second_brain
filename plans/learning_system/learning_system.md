@@ -796,6 +796,53 @@ behavior above), it gets its own new capture — never edits or overwrites a pri
   lives (e.g. `C:\projects\learning_lab\`) and setting `LEARNING_LAB_PATH` to it before the first v0.1
   run.
 
+## Known gaps to resolve before/during build (fourth GPT 5.6 Sol review — implementation-readiness pass)
+
+A fourth adversarial review, asked directly "is this implementation-ready," found the design/methodology
+questions settled but flagged remaining **specification** gaps — places a fresh builder would still have
+to invent behavior. Deliberately left open rather than polished further right now (design is stable
+enough to build from; these are the kind of concrete, narrow questions a pre-build `/grill-me` pass
+should resolve quickly with fresh eyes):
+
+**Blocking (resolve before/while building v0.1):**
+1. **Gate-state vocabulary can't represent legitimate non-attempts.** `teach_back`/`exercise`/
+   `failure_analysis` are currently `passed`/`unmet` only — but the direct-answer exit and the
+   no-runnable-exercise branch legitimately skip gates without failing them. Needs a third value (e.g.
+   `not_attempted`) and a rule for when each branch uses it.
+2. **Independent-practitioner/architect graduation fallback doesn't state the resulting outcome.** When
+   no diagnose-or-transfer variant is practical, the record is supposed to say the competency is
+   "provisional" — but the doc never says whether that session's outcome is `completed` or `graduated`.
+   Needs an explicit rule (most likely: caps at `completed`, competency stays outstanding, never
+   `graduated` without a passed check).
+3. **No generic construction rule for the competency contract's 3–6 "I can..." items** — only the three
+   gate rubrics (teach-back/failure-analysis/exercise) have construction rules; the pilot's 6-item
+   contract is hand-written with no general derivation rule a fresh topic could follow.
+4. **Predeclared criteria (rubrics, success measure) have no durable storage field.** They must be
+   written before teaching and never changed — but `MISSION.md`'s finalized structure only has `Bounded
+   exercise` and `Competency contract`, no fields for the teach-back rubric, failure-analysis rubric, or
+   committed success measure/metrics.
+5. **Step 2's internal ordering is ambiguous** — research, rubric/contract construction, the ladder
+   explanation, and the exercise-contract handoff are all described as happening "during Step 2" without
+   a literal sequence.
+6. **Pilot's failure-analysis rubric contradicts the generic risk-based rule.** The generic rule requires
+   highest-risk + misleading-success failures specifically; the pilot's worked example still says "at
+   least two concrete ways" — the count-based framing the generic rule was written to replace.
+7. **Resume behavior isn't executable as written.** "Read `MISSION.md` + `RECORD.md` before continuing"
+   doesn't say where a `paused` mission resumes from, whether already-passed gates carry over, or how a
+   direct-answer/blocked-exercise pause restarts.
+
+**Non-blocking (worth a look, not required to unblock the build):**
+- Target-competency inference from a stated application is still a judgment call, not a deterministic
+  rule/table.
+- The storage-commit sequence should spell out which artifacts get staged together (not just `RECORD.md`
+  in isolation) and where the dirty-tree check fits relative to the Step 1 draft write.
+- The `learning_lab` repo URL/org being unconfirmed is a deployment prerequisite, not something the
+  `SKILL.md` author needs to resolve while writing the skill — worth stating plainly so it isn't read as
+  a blocker to authoring.
+- The mandatory v0.1 contracts are substantial; the "keep `SKILL.md` under ~200 lines" guidance may need
+  an explicit carve-out for which content can live in `references/` even at v0.1, not just for the
+  deferred Mode 1/3 material.
+
 ## Next step
 
 Build v0.1 (Mode 2 only, 5-step version, with the review fixes applied) as a standalone skill and pilot
