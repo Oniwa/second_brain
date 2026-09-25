@@ -143,10 +143,18 @@ and a fresh build would have invented these differently every time.
   targeting independent-practitioner depth."*) and proceed directly into Step 2 — no separate approval
   round-trip required unless the user objects to the restated mission.
 
-**Step 2 — Grounded explanation.** See "Sourcing and grounding contract" below for the exact tool
-sequence; this step's *output* structure is: run the three-step learning ladder (see "Learning ladder —
-exact output shape" below), then a short grounding note listing what came from the second brain vs. live
-research (feeds `SOURCES.md`).
+**Step 2 — Grounded explanation.** Internally sequenced (resolved during a pre-build `/grill-me`
+readiness pass — the four things this step does were previously all described as happening "during
+Step 2" with no literal order):
+1. Sourcing/grounding first (second-brain lookup + live research — see "Sourcing and grounding contract"
+   below for the exact tool sequence) — sources have to exist before anything else here can be written.
+2. Predeclared criteria + competency contract construction (teach-back rubric, failure-analysis rubric,
+   success measure, then the derived competency contract — see "Decision definitions and generic rubric
+   rule") — written from what step 1 surfaced, before any teaching happens.
+3. The learning ladder explanation itself (see "Learning ladder — exact output shape" below), plus a
+   short grounding note listing what came from the second brain vs. live research (feeds `SOURCES.md`).
+4. Applied-exercise contract handoff (type/timebox/baseline/observable output — see "Applied-exercise
+   contract" below), transitioning into Step 3.
 
 **Step 3 — Applied exercise.** See "Applied-exercise contract" below.
 
@@ -247,7 +255,19 @@ just the pilot's pre-written example):
   yes/no recommendation, **committed to before the result is seen** (not chosen or adjusted afterward to
   fit whatever the run produced).
 
-Write all three during Step 2 (before teaching/before the exercise runs), state the teach-back rubric to
+**Competency-contract construction rule (resolved during a pre-build `/grill-me` readiness pass — the
+three rubrics above had generic rules but the contract's own 3–6 "I can..." items didn't):** derive the
+contract mechanically from the same fields already written above, rather than hand-inventing items per
+topic — one item each for: (1) the core mechanism [from the teach-back rubric], (2) actually doing the
+bounded exercise [from the applied-exercise contract], (3) a tradeoff/boundary condition [from the
+teach-back rubric], (4) a failure mode [from the failure-analysis rubric], (5) a concrete yes/no or
+recommendation answering the mission's own question. That's 5 items at **practitioner** target
+competency. Add item (6) — the diagnose-or-transfer capability itself — only when `target_competency` is
+**independent practitioner or architect**, giving 6 items at that level. This is a starting rule, expected
+to be adjusted once used on real topics, not a permanent fixed formula.
+
+Write all three rubrics (plus the competency contract they derive) during Step 2 (before teaching/before
+the exercise runs), state the teach-back rubric to
 the user verbatim at Step 4 grading time, and grade only against what was written — never expand or
 shrink criteria after the fact.
 
@@ -276,7 +296,10 @@ failure, or retention past the session. v0.1 does not pretend otherwise:
   the record explicitly states the competency is **provisional** and names the follow-up check needed
   before it should be treated as verified independent capability. Silently awarding "independent
   practitioner" off a single teach-back and one guided exercise is a graduation-gate failure, not an
-  acceptable simplification.
+  acceptable simplification. **Resulting session outcome when (b) applies (resolved during a pre-build
+  `/grill-me` readiness pass):** that session caps at `completed`, never `graduated` — the outstanding
+  diagnose-or-transfer check is logged as a Remaining Gap in `RECORD.md` regardless of how well the
+  other three gates went.
 - **Retention is out of scope for v0.1's gate, not ignored.** See "Retention checkpoint" below — a
   Mode 2 completion (even a `graduated` one) records a fixed check-in point rather than asserting the
   competency will still hold weeks later.
@@ -305,8 +328,15 @@ doc from here on:
   - `graduated` — the full competency contract is separately checked off (see above; independent
     practitioner/architect targets additionally require the diagnose-or-transfer check).
 - **Gate results** (three independent fields inside `RECORD.md`, not folded into the single outcome
-  value above): `teach_back`, `exercise`, `failure_analysis` — each is `passed` or `unmet` (with the
-  specific Remaining Gap noted if `unmet` after one remediation retry).
+  value above): `teach_back`, `exercise`, `failure_analysis` — each is `passed`, `unmet` (with the
+  specific Remaining Gap noted if `unmet` after one remediation retry), or `not_attempted` (resolved
+  during a pre-build `/grill-me` readiness pass — the earlier two-value vocabulary couldn't represent a
+  gate that was legitimately skipped rather than failed). `not_attempted` rules:
+  - The "I just need the answer" exit sets **all three** gates to `not_attempted` — nothing was graded.
+  - The no-runnable-exercise branch sets `exercise=not_attempted` only; `teach_back` keeps whatever
+    value it already reached (teaching may have completed before the exercise blocked).
+  - Any gate at `not_attempted` forces the session outcome to `paused` — `completed`/`graduated` require
+    all three gates to have actually been attempted and passed.
 - **Recommended next step** (a separate `RECORD.md` field, free text, not a controlled vocabulary) is
   where "apply this now" / "continue in a follow-on session" / "revisit with a harder case" belong — this
   resolves what the earlier draft's `apply` and `continue` values were actually trying to express, without
@@ -449,8 +479,9 @@ help, going in aware of the common failure modes).
 3. Design a retrieval-quality comparison (with vs. without reranker) using a repeatable small dataset.
 4. State the latency/cost/complexity cost of adding it.
 5. Give a specific yes/no recommendation for the stated use case, with the evidence that supports it.
-6. Name at least two ways a reranker itself can fail or mislead (e.g., overfit to the eval set, hides a
-   bad base-retrieval result instead of fixing it).
+6. Name the highest-risk way a reranker can fail for this mission, and one way it can produce a
+   misleading success signal (e.g., overfitting to the eval set as the highest-risk failure; masking a
+   bad base-retrieval result as a case that looks like an improvement but isn't).
 
 *Rubric* (written before teaching, restated verbatim at grading time, per fix #3, and now aligned with
 the "Decision definitions and generic rubric rule" section above rather than treated as one conflated
@@ -462,9 +493,13 @@ gate). This mission has three separate checks, not one:
 - **Exercise verified** — the reranking step from competency-contract item 2 actually runs against the
   small dataset from item 3, and produces the with/without comparison named in the applied-exercise
   contract above (not just "I wrote the code").
-- **Failure-analysis satisfied** — competency-contract item 6 is its own independent check: at least two
-  concrete ways a reranker can fail or mislead, each with a way to detect it — checked separately so a
-  clean teach-back can't stand in for it.
+- **Failure-analysis satisfied** — competency-contract item 6 is its own independent check, matching the
+  generic risk-based rule (resolved during a pre-build `/grill-me` readiness pass — this pilot example
+  previously still used the older count-based "at least two ways" framing the generic rule was written
+  to replace): the single highest-risk failure mode for this mission (reranker overfitting to the small
+  eval set), plus one failure mode producing a misleading success signal (reranker masking a bad
+  base-retrieval result — looks like an improvement, isn't) — each with how it would be detected — checked
+  separately so a clean teach-back can't stand in for it.
 
 Partial/vague answers on any one of the three checks trigger the remediation path (name the gap, re-teach
 only that part, retry once, then log as a Remaining Gap) — a Remaining Gap on one check doesn't block the
@@ -534,11 +569,21 @@ Frontmatter requirements per spec: `name` (lowercase, hyphens, matches directory
 verified learning cycle on a professionally relevant technical topic, producing a working exercise and a
 concise learning record. Use when the user wants to learn/study/get up to speed on an AI, agentic-systems,
 or technical topic they intend to apply."), optionally `compatibility` if the skill assumes second-brain
-Model Context Protocol (MCP) tools are available. Keep `SKILL.md` itself lean (per agentskills.io best
-practices — comparable to
-this repo's own "under 200 lines, defer depth to reference files" belief already captured in the second
-brain) — v0.1's 5-step Mode 2 flow should fit directly in `SKILL.md`; Mode 1/Mode 3 additions in v0.3/v1.0
-belong in `references/` until promoted.
+Model Context Protocol (MCP) tools are available. **Line-budget carve-out (resolved during a pre-build
+`/grill-me` readiness pass — v0.1's mandatory contracts are substantial enough that "keep it lean" needed
+an explicit split):** `SKILL.md` itself holds only the 5-step procedure — the exact steps and transition
+rules an agent follows, kept genuinely under ~200 lines. The reference material behind it (the three
+rubrics' full construction rules, the `MISSION.md`/`SOURCES.md`/`RECORD.md` templates, the storage
+protocol details) lives in `references/`, with `SKILL.md` pointing to the relevant reference file at each
+step rather than inlining everything — the same deferral pattern already used for Mode 1/3, applied to
+v0.1's own bulk instead of just future modes.
+
+**Harness scope (resolved during a pre-build `/grill-me` readiness pass):** v0.1 targets **GitHub Copilot
+CLI specifically** — the "Artifact storage" section below assumes local filesystem access to a
+sibling-repo clone, which only holds in harnesses with that access. Other harnesses (GitHub Copilot
+desktop app, Claude "cowork," mobile/web-only sessions) are explicitly out of scope for v0.1, not silently
+assumed to work — broadening beyond CLI is deliberate technical debt, taken on later only if v0.1 proves
+useful enough to justify it.
 
 **Invocation mode (resolved — a GPT 5.6 Sol review flagged this as unspecified):** `disable-model-invocation:
 true`, same as `pick-up` — `/learn` runs only when explicitly invoked, never auto-triggered by the model
@@ -572,17 +617,24 @@ variable, `LEARNING_LAB_PATH`, read once at the start of Step 1.** If it's unset
 - Stop before Step 1 proceeds and ask the user to set `LEARNING_LAB_PATH` to their local `learning_lab`
   clone (or provide the path directly for that session) — don't guess a default location or silently
   fall back to writing inside `second_brain`.
+- **Dirty-tree check moves up (resolved during a pre-build `/grill-me` readiness pass):** runs
+  immediately after `LEARNING_LAB_PATH` is read, before Step 1's `MISSION.md` draft is written — not just
+  before the Step 5 commit — so a dirty tree is caught before any new files exist, not after a session's
+  worth of work is already sitting uncommitted.
 - The skill does **not** clone, discover multiple candidate clones, or push automatically in v0.1:
 1. If the confirmed local path doesn't exist or isn't a git repo, stop and ask the user to clone it
    there first — don't attempt to `git clone`/create it automatically.
 2. Read/write files directly under `<learning_lab_path>/<topic-slug>/`.
-3. After writing `RECORD.md` (Step 5), run a local `git add` + `git commit` in
-   that repo (commit message: the topic slug + session outcome, e.g. `"rag-reranking-evaluation:
-   completed"` — using the canonical outcome vocabulary below, not the earlier ad hoc example) —
-   **local commit only, no push.** Tell the user the commit happened and that pushing/syncing
-   `learning_lab` elsewhere is a manual step on their side.
+3. After writing `RECORD.md` (Step 5), stage the **entire `<topic-slug>/` directory** (resolved during a
+   pre-build `/grill-me` readiness pass — not just `RECORD.md` in isolation, since by Step 5 a mission
+   may also have finalized `MISSION.md`/`SOURCES.md`/exercise files that were never committed on their
+   own) and run one local `git add` + `git commit` in that repo (commit message: the topic slug + session
+   outcome, e.g. `"rag-reranking-evaluation: completed"` — using the canonical outcome vocabulary below,
+   not the earlier ad hoc example) — **local commit only, no push.** Tell the user the commit happened
+   and that pushing/syncing `learning_lab` elsewhere is a manual step on their side.
 4. If the local git repo has uncommitted, unrelated changes already sitting in it (a dirty tree not
-   caused by this skill), stop and tell the user rather than committing over them.
+   caused by this skill), stop and tell the user rather than committing over them — see the moved-up
+   dirty-tree check above; this step is what that check protects against.
 
 Full remote automation (clone-by-URL discovery, pull-before-read, push, conflict/failure handling) is
 **deferred to v0.2+**, once the pre-cloned-local model has actually been used and its friction points are
@@ -639,6 +691,17 @@ a topic already marked `graduated` starts a **new**, explicitly-named follow-on 
 not a silent re-edit of the graduated one. Richer resume mechanics (partial-session recovery, fuzzy
 matching, mission-drift reconciliation) are v0.2+ work, once real resume patterns are observed.
 
+**Resume mechanics (resolved during a pre-build `/grill-me` readiness pass — the prior text said *what*
+files to read but not where execution actually restarts):**
+- Re-enter at the step **after** the last one that produced a durable artifact: `MISSION.md` drafted only
+  (Step 1 done) → resume at Step 2; `MISSION.md`+`SOURCES.md` finalized (Step 2 done) but no exercise
+  output → resume at Step 3; an exercise result exists but grading never happened → resume at Step 4.
+- Already-`passed` gates found in a partial `RECORD.md` **carry over as-is** — they are not re-graded;
+  only `unmet`/`not_attempted` gates get retried.
+- The one exception is an "I just need the answer" pause: since that exit sets all three gates to
+  `not_attempted` by design, resuming restarts the **teaching cycle fresh at Step 2** — there is nothing
+  partial to carry forward from that particular exit.
+
 ### Artifact templates (resolved — these were referenced above but never actually defined)
 
 **`<topic-slug>/MISSION.md`** — written in **two passes**, not one (a GPT 5.6 Sol review correctly found
@@ -649,10 +712,11 @@ contract and bounded-exercise fields aren't actually decided until Step 2 and th
   `Competency contract` as `(pending — finalized at Step 2)` placeholders rather than inventing them
   early.
 - **Finalized, at the end of Step 2:** fill in `Bounded exercise` (from the Step 2→3 transition, per the
-  "Applied-exercise contract") and the full `Competency contract` (written alongside the teach-back
-  rubric and failure-analysis check, per "Decision definitions and generic rubric rule") — replacing the
-  placeholders. `MISSION.md` is not read as complete/reliable until this second pass; nothing downstream
-  (the exercise, the teach-back rubric) should be started before it is.
+  "Applied-exercise contract"), the full `Competency contract`, and the new `Predeclared criteria` section
+  (written alongside the teach-back rubric and failure-analysis check, per "Decision definitions and
+  generic rubric rule") — replacing the placeholders. `MISSION.md` is not read as complete/reliable until
+  this second pass; nothing downstream (the exercise, the teach-back rubric) should be started before it
+  is.
 ```markdown
 # Mission: <topic title>
 
@@ -670,6 +734,18 @@ By the end of this mission I can:
 3. <"I can ..." statement>
 (3–6 statements; see "Decision definitions and generic rubric rule" for how these are derived —
 pending — finalized at Step 2 — until then)
+
+## Predeclared criteria
+(new section, resolved during a pre-build `/grill-me` readiness pass — the three rubrics/success measure
+must be written before teaching/before the exercise runs and never changed afterward, but had no durable
+field to live in; these are copied verbatim into `RECORD.md` at Step 4/5 grading time, not re-derived —
+pending — finalized at Step 2 — until then)
+- **Teach-back rubric:** <core mechanism / mission-specific relevance / tradeoff-or-boundary — per the
+  teach-back construction rule>
+- **Failure-analysis rubric:** <highest-risk failure mode / misleading-success failure mode, each with
+  detection method — per the failure-analysis construction rule>
+- **Exercise success measure:** <observable output that settles the mission's question; for decision
+  exercises, the metric(s) committed to before the comparison runs>
 
 ## Mission statement
 <the falsifiable, narrowed statement from Step 1 — not an open-ended study>
@@ -700,7 +776,8 @@ contract's fallback rule; leave "None" if not applicable>
 - **Outcome:** <paused | completed | graduated>
   (canonical session-outcome vocabulary — see "Outcome vocabulary"; NOT the same field as the gate
   results below)
-- **Gate results:** teach_back=<passed|unmet>, exercise=<passed|unmet>, failure_analysis=<passed|unmet>
+- **Gate results:** teach_back=<passed|unmet|not_attempted>, exercise=<passed|unmet|not_attempted>,
+  failure_analysis=<passed|unmet|not_attempted>
 
 ## Cold-attempt baseline
 <the user's brief unaided guess/attempt from the Step 1→2 transition, verbatim or close paraphrase —
@@ -785,63 +862,54 @@ No special category is forced — let the second brain's own classification appl
 other capture. If a topic graduates a second time (a follow-on mission under a new slug, per the resume
 behavior above), it gets its own new capture — never edits or overwrites a prior graduation thought.
 
-## Open decisions (resolve before or during v0.1 build)
+## Open decisions (resolved during a pre-build `/grill-me` readiness pass)
 
-- **Confirm the `learning_lab` project name, GitHub repo URL, and creation timing** — first action when
-  work on this actually starts. Not resolved yet; proposed name `learning_lab` as a starting point, its
-  own git repo from session one (settled — see "Artifact storage," driven by the mobile-access
-  requirement, not just exercises being real code) — but confirm the actual repo URL/org before creating
-  anything. **The lookup mechanism itself is resolved** (the `LEARNING_LAB_PATH` environment variable,
-  see "Artifact storage") — what's still open is only the concrete value: where the initial local clone
-  lives (e.g. `C:\projects\learning_lab\`) and setting `LEARNING_LAB_PATH` to it before the first v0.1
-  run.
+- **`learning_lab` project location — resolved.** Local clone at `C:\projects\learning_lab\` (sibling to
+  `C:\projects\second_brain\`, matching this environment's existing `C:\projects\*` convention and the
+  `/transcript` skill's precedent), backed by a new private GitHub repo under the user's personal
+  account. `LEARNING_LAB_PATH` is set to `C:\projects\learning_lab` before the first v0.1 run. The lookup
+  mechanism itself was already resolved (the `LEARNING_LAB_PATH` environment variable, see "Artifact
+  storage") — this closes out the one remaining open value.
+- **Harness scope — resolved.** v0.1 targets GitHub Copilot CLI only (see the "Harness scope" note under
+  "Skill format" above); this was raised as a live pain point during the readiness pass (GitHub Copilot
+  desktop app / Claude "cowork" sessions can't reliably read an arbitrary second local path), and
+  deliberately deferred rather than solved now.
+- **v0.2+ candidate worth flagging now so it isn't rediscovered later:** migrate `learning_lab` storage
+  to a cloud database (Supabase, which `second_brain` already uses via `mcp/`/`supabase/`) once
+  cross-harness use is actually needed — an API-backed record is reachable from any harness with network
+  access, regardless of which repo is locally cloned where, sidestepping the local-clone constraint
+  entirely instead of working around it with more git automation.
 
-## Known gaps to resolve before/during build (fourth GPT 5.6 Sol review — implementation-readiness pass)
+## Fixes from the fourth GPT 5.6 Sol review — resolved via a pre-build `/grill-me` readiness pass
 
 A fourth adversarial review, asked directly "is this implementation-ready," found the design/methodology
 questions settled but flagged remaining **specification** gaps — places a fresh builder would still have
-to invent behavior. Deliberately left open rather than polished further right now (design is stable
-enough to build from; these are the kind of concrete, narrow questions a pre-build `/grill-me` pass
-should resolve quickly with fresh eyes):
+to invent behavior. A `/grill-me` pass immediately before build resolved all of them; the resolutions
+themselves are recorded inline at each referenced section (search this doc for "pre-build `/grill-me`
+readiness pass" to find each one), summarized here for a single before/after view:
 
-**Blocking (resolve before/while building v0.1):**
-1. **Gate-state vocabulary can't represent legitimate non-attempts.** `teach_back`/`exercise`/
-   `failure_analysis` are currently `passed`/`unmet` only — but the direct-answer exit and the
-   no-runnable-exercise branch legitimately skip gates without failing them. Needs a third value (e.g.
-   `not_attempted`) and a rule for when each branch uses it.
-2. **Independent-practitioner/architect graduation fallback doesn't state the resulting outcome.** When
-   no diagnose-or-transfer variant is practical, the record is supposed to say the competency is
-   "provisional" — but the doc never says whether that session's outcome is `completed` or `graduated`.
-   Needs an explicit rule (most likely: caps at `completed`, competency stays outstanding, never
-   `graduated` without a passed check).
-3. **No generic construction rule for the competency contract's 3–6 "I can..." items** — only the three
-   gate rubrics (teach-back/failure-analysis/exercise) have construction rules; the pilot's 6-item
-   contract is hand-written with no general derivation rule a fresh topic could follow.
-4. **Predeclared criteria (rubrics, success measure) have no durable storage field.** They must be
-   written before teaching and never changed — but `MISSION.md`'s finalized structure only has `Bounded
-   exercise` and `Competency contract`, no fields for the teach-back rubric, failure-analysis rubric, or
-   committed success measure/metrics.
-5. **Step 2's internal ordering is ambiguous** — research, rubric/contract construction, the ladder
-   explanation, and the exercise-contract handoff are all described as happening "during Step 2" without
-   a literal sequence.
-6. **Pilot's failure-analysis rubric contradicts the generic risk-based rule.** The generic rule requires
-   highest-risk + misleading-success failures specifically; the pilot's worked example still says "at
-   least two concrete ways" — the count-based framing the generic rule was written to replace.
-7. **Resume behavior isn't executable as written.** "Read `MISSION.md` + `RECORD.md` before continuing"
-   doesn't say where a `paused` mission resumes from, whether already-passed gates carry over, or how a
-   direct-answer/blocked-exercise pause restarts.
+**Former blocking gaps, now resolved:**
+1. **Gate-state vocabulary** — added a third value, `not_attempted` (see "Outcome vocabulary").
+2. **Independent-practitioner/architect graduation fallback** — caps at `completed`, never `graduated`
+   without a passed diagnose-or-transfer check (see "What 'completed'/'graduated' actually certify").
+3. **Competency-contract construction rule** — added, deriving 5–6 items mechanically from the existing
+   rubric fields (see "Decision definitions and generic rubric rule").
+4. **Predeclared-criteria storage field** — added a `## Predeclared criteria` section to `MISSION.md`
+   (see the `MISSION.md` template under "Artifact templates").
+5. **Step 2's internal ordering** — made literal: sourcing → rubric/contract construction → ladder
+   explanation → exercise-contract handoff (see "v0.1 interaction state machine," Step 2).
+6. **Pilot's failure-analysis rubric** — rewritten to match the generic risk-based rule (see the Pilot's
+   worked-example rubric).
+7. **Resume behavior** — made executable: resume at the step after the last durable artifact, passed
+   gates carry over, direct-answer exits restart fresh at Step 2 (see "Resume behavior in v0.1").
 
-**Non-blocking (worth a look, not required to unblock the build):**
-- Target-competency inference from a stated application is still a judgment call, not a deterministic
-  rule/table.
-- The storage-commit sequence should spell out which artifacts get staged together (not just `RECORD.md`
-  in isolation) and where the dirty-tree check fits relative to the Step 1 draft write.
-- The `learning_lab` repo URL/org being unconfirmed is a deployment prerequisite, not something the
-  `SKILL.md` author needs to resolve while writing the skill — worth stating plainly so it isn't read as
-  a blocker to authoring.
-- The mandatory v0.1 contracts are substantial; the "keep `SKILL.md` under ~200 lines" guidance may need
-  an explicit carve-out for which content can live in `references/` even at v0.1, not just for the
-  deferred Mode 1/3 material.
+**Former non-blocking items:**
+- Target-competency inference — deliberately left as a judgment call for v0.1, not a deterministic table.
+- Storage-commit staging + dirty-tree timing — resolved: stage the whole `<topic-slug>/` directory at
+  Step 5, dirty-tree check moved to before Step 1 (see "v0.1 storage protocol").
+- `learning_lab` repo URL/org — resolved above under "Open decisions."
+- `SKILL.md` line-budget carve-out — resolved: procedure only inline, rubric/template detail moved to
+  `references/` (see "Skill format").
 
 ## Next step
 
